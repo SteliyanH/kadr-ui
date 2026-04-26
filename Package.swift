@@ -12,9 +12,15 @@ let package = Package(
     products: [
         .library(name: "KadrUI", targets: ["KadrUI"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/SteliyanH/kadr.git", from: "0.4.0"),
+    ],
     targets: [
         .target(
             name: "KadrUI",
+            dependencies: [
+                .product(name: "Kadr", package: "kadr"),
+            ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
                 .swiftLanguageMode(.v6)
