@@ -94,16 +94,3 @@ public struct ThumbnailStrip: View {
     }
 }
 
-// MARK: - SwiftUI Image bridge for PlatformImage
-
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
-extension Image {
-    /// Cross-platform initializer for Kadr's ``Kadr/PlatformImage`` (UIImage / NSImage).
-    init(platformImage: PlatformImage) {
-        #if canImport(UIKit)
-        self.init(uiImage: platformImage)
-        #elseif canImport(AppKit)
-        self.init(nsImage: platformImage)
-        #endif
-    }
-}
