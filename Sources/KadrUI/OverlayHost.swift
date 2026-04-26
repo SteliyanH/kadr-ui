@@ -38,6 +38,9 @@ public struct OverlayHost: View {
 
     private let video: Video
     private let customRenderer: ((any Overlay) -> AnyView?)?
+    private var onTapHandler: ((LayerID) -> Void)?
+    private var onDragChangedHandler: ((LayerID, CGSize) -> Void)?
+    private var onDragEndedHandler: ((LayerID, CGSize) -> Void)?
 
     /// Create an overlay host for `video`.
     /// - Parameters:
@@ -64,10 +67,32 @@ public struct OverlayHost: View {
     private func overlayView(for overlay: any Overlay, in containerSize: CGSize) -> some View {
         let frame = computeFrame(for: overlay, in: containerSize)
         let resolved = customRenderer?(overlay) ?? defaultView(for: overlay)
-        resolved
+        let visual = resolved
             .frame(width: frame.width, height: frame.height)
             .opacity(overlay.opacity)
-            .position(x: frame.midX, y: frame.midY)
+
+        Group {
+            if let id = overlay.layerID, hasAnyGestureHandler {
+                visual
+                    .onTapGesture { onTapHandler?(id) }
+                    .gesture(
+                        DragGesture(minimumDistance: 5)
+                            .onChanged { value in
+                                onDragChangedHandler?(id, value.translation)
+                            }
+                            .onEnded { value in
+                                onDragEndedHandler?(id, value.translation)
+                            }
+                    )
+            } else {
+                visual
+            }
+        }
+        .position(x: frame.midX, y: frame.midY)
+    }
+
+    private var hasAnyGestureHandler: Bool {
+        onTapHandler != nil || onDragChangedHandler != nil || onDragEndedHandler != nil
     }
 
     private func computeFrame(for overlay: any Overlay, in containerSize: CGSize) -> CGRect {
@@ -163,5 +188,51 @@ public struct OverlayHost: View {
         case .center:   return .center
         case .trailing: return .trailing
         }
+    }
+}
+
+// MARK: - Gesture modifiers
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension OverlayHost {
+
+    /// Attach a tap handler that fires with the tapped overlay's ``Kadr/LayerID``.
+    ///
+    /// Only overlays with a non-`nil` ``Kadr/LayerID/`` participate. The handler is
+    /// invoked on `MainActor`; it's safe to mutate `@State` from inside.
+    ///
+    /// ```swift
+    /// OverlayHost(video)
+    ///     .onLayerTap { id in selectedLayerID = id }
+    /// ```
+    public func onLayerTap(_ action: @escaping (LayerID) -> Void) -> OverlayHost {
+        var copy = self
+        copy.onTapHandler = action
+        return copy
+    }
+
+    /// Attach drag handlers that fire with the dragged overlay's ``Kadr/LayerID`` and
+    /// the cumulative translation in the host's coordinate space.
+    ///
+    /// Use `onChanged` to track movement during the drag (e.g. update a preview transform);
+    /// use `onEnded` to commit the final position. Both are optional; pass `nil` to skip
+    /// either phase. Only overlays with a non-`nil` ``Kadr/LayerID`` participate.
+    /// Drag uses a 5-pt minimum distance so taps and drags don't conflict.
+    ///
+    /// ```swift
+    /// OverlayHost(video)
+    ///     .onLayerDrag(
+    ///         onChanged: { id, t in livePreviewOffset[id] = t },
+    ///         onEnded:   { id, t in commit(id, finalOffset: t) }
+    ///     )
+    /// ```
+    public func onLayerDrag(
+        onChanged: ((LayerID, CGSize) -> Void)? = nil,
+        onEnded: ((LayerID, CGSize) -> Void)? = nil
+    ) -> OverlayHost {
+        var copy = self
+        copy.onDragChangedHandler = onChanged
+        copy.onDragEndedHandler = onEnded
+        return copy
     }
 }
