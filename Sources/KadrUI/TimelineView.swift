@@ -34,6 +34,7 @@ public struct TimelineView: View {
 
     private let video: Video
     private let currentTime: Binding<CMTime>?
+    private let selectedClipID: Binding<ClipID?>?
 
     /// Resolved durations for clips whose `Clip.duration` is synchronously `.zero`
     /// (currently only untrimmed `VideoClip`s). Keyed by index in `video.clips`.
@@ -45,9 +46,19 @@ public struct TimelineView: View {
     ///   - currentTime: Optional binding to a playhead time. When non-`nil`, a vertical
     ///     line is drawn at the corresponding x position; the timeline does not write
     ///     back to the binding (scrubbing-by-tap is reserved for a future PR).
-    public init(_ video: Video, currentTime: Binding<CMTime>? = nil) {
+    ///   - selectedClipID: Optional binding to a ``Kadr/ClipID`` for tap-to-select.
+    ///     Tapping a media clip with a non-`nil` ``Kadr/Clip/clipID`` writes its ID
+    ///     into the binding; tapping the already-selected clip clears it. Tapping
+    ///     transitions or unidentified clips does nothing. The selected clip is
+    ///     highlighted with a thicker, brighter border.
+    public init(
+        _ video: Video,
+        currentTime: Binding<CMTime>? = nil,
+        selectedClipID: Binding<ClipID?>? = nil
+    ) {
         self.video = video
         self.currentTime = currentTime
+        self.selectedClipID = selectedClipID
     }
 
     public var body: some View {
@@ -100,10 +111,15 @@ public struct TimelineView: View {
             transitionGlyph()
                 .frame(width: width)
         } else {
+            let isSelected = clip.clipID != nil && clip.clipID == selectedClipID?.wrappedValue
             RoundedRectangle(cornerRadius: 4)
-                .fill(clipColor(for: clip).opacity(0.6))
+                .fill(clipColor(for: clip).opacity(isSelected ? 0.85 : 0.6))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 4).strokeBorder(clipColor(for: clip), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(
+                            isSelected ? Color.white : clipColor(for: clip),
+                            lineWidth: isSelected ? 2 : 1
+                        )
                 )
                 .overlay(
                     Text(clipLabel(for: clip, seconds: seconds))
@@ -115,7 +131,17 @@ public struct TimelineView: View {
                 )
                 .frame(width: width)
                 .padding(.horizontal, 1)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handleTap(on: clip)
+                }
         }
+    }
+
+    private func handleTap(on clip: any Clip) {
+        guard let binding = selectedClipID, let id = clip.clipID else { return }
+        // Tapping the already-selected clip clears the selection.
+        binding.wrappedValue = (binding.wrappedValue == id) ? nil : id
     }
 
     @ViewBuilder
