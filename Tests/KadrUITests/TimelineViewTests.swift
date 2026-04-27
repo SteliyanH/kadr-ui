@@ -293,4 +293,45 @@ struct TimelineViewTests {
         #expect(wL == 100 && offL == 0)
         #expect(wT == 100 && offT == 0)
     }
+
+    // MARK: - Scrub time conversion (v0.4.2)
+
+    @Test func scrubTimeAtOriginIsZero() {
+        let t = TimelineView.scrubTime(x: 0, pxPerSecond: 100, totalSeconds: 5)
+        #expect(t == 0)
+    }
+
+    @Test func scrubTimeAtMidpoint() {
+        // 250px @ 100px/s = 2.5s
+        let t = TimelineView.scrubTime(x: 250, pxPerSecond: 100, totalSeconds: 5)
+        #expect(t == 2.5)
+    }
+
+    @Test func scrubTimeClampsToTotalSeconds() {
+        // 1000px @ 100px/s = 10s, clamped to totalSeconds (5).
+        let t = TimelineView.scrubTime(x: 1000, pxPerSecond: 100, totalSeconds: 5)
+        #expect(t == 5)
+    }
+
+    @Test func scrubTimeClampsToZeroForNegativeX() {
+        let t = TimelineView.scrubTime(x: -50, pxPerSecond: 100, totalSeconds: 5)
+        #expect(t == 0)
+    }
+
+    @Test func scrubTimeReturnsZeroForZeroPxPerSecond() {
+        // Defensive: empty composition / zero render width → no division.
+        let t = TimelineView.scrubTime(x: 250, pxPerSecond: 0, totalSeconds: 5)
+        #expect(t == 0)
+    }
+
+    @Test @MainActor func scrubStripRendersWhenCurrentTimeBound() {
+        // Smoke: presence of the scrub strip is gated on currentTime != nil. With it
+        // bound, body should still resolve.
+        @State var t = CMTime(seconds: 0, preferredTimescale: 600)
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 1.0)
+        }
+        _ = TimelineView(video, currentTime: $t).body
+    }
 }
