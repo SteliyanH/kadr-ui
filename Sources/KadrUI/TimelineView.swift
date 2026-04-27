@@ -51,6 +51,9 @@ public struct TimelineView: View {
     @State private var trimmingIndex: Int?
     /// Whether the trim drag is on the leading (left) or trailing (right) handle.
     @State private var trimmingEdge: TrimEdge?
+    /// Current pixel delta of the in-flight trim drag. Drives the live width/offset
+    /// preview on the dragged clip; applied to the callback in seconds on release.
+    @State private var trimPixelDelta: CGFloat = 0
 
     internal enum TrimEdge { case leading, trailing }
 
@@ -141,48 +144,87 @@ public struct TimelineView: View {
     private func clipBlock(at index: Int, pxPerSecond: Double) -> some View {
         let clip = video.clips[index]
         let seconds = CMTimeGetSeconds(durationForClip(at: index))
-        let width = max(0, seconds * pxPerSecond)
+        let baseWidth = max(0, seconds * pxPerSecond)
 
         if clip is Kadr.Transition {
             transitionGlyph()
-                .frame(width: width)
+                .frame(width: baseWidth)
         } else {
             let isSelected = clip.clipID != nil && clip.clipID == selectedClipID?.wrappedValue
             let isDragging = draggingIndex == index
-            RoundedRectangle(cornerRadius: 4)
-                .fill(clipColor(for: clip).opacity(isSelected ? 0.85 : 0.6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(
-                            isSelected ? Color.white : clipColor(for: clip),
-                            lineWidth: isSelected ? 2 : 1
-                        )
-                )
-                .overlay(
-                    Text(clipLabel(for: clip, seconds: seconds))
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .padding(.horizontal, 4),
-                    alignment: .leading
-                )
-                .frame(width: width)
-                .padding(.horizontal, 1)
-                .overlay(alignment: .leading) {
-                    if onTrim != nil { trimHandle(at: index, edge: .leading, pxPerSecond: pxPerSecond) }
-                }
-                .overlay(alignment: .trailing) {
-                    if onTrim != nil { trimHandle(at: index, edge: .trailing, pxPerSecond: pxPerSecond) }
-                }
-                .scaleEffect(isDragging ? 1.05 : 1.0)
-                .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
-                .offset(x: isDragging ? dragOffset : 0)
-                .zIndex(isDragging ? 1 : 0)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    handleTap(on: clip)
-                }
-                .gesture(reorderGesture(for: index, pxPerSecond: pxPerSecond))
+            // Live trim deltas: keep the slot's reserved width fixed (so neighbors don't
+            // reflow during the drag) but morph the inner content's width and offset.
+            // On release the consumer rebuilds the Video with the new durations and the
+            // slots recompute on the next render pass.
+            let (liveWidth, liveOffset) = liveTrimMetrics(for: index, baseWidth: baseWidth)
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(clipColor(for: clip).opacity(isSelected ? 0.85 : 0.6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(
+                                isSelected ? Color.white : clipColor(for: clip),
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    )
+                    .overlay(
+                        Text(clipLabel(for: clip, seconds: seconds))
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4),
+                        alignment: .leading
+                    )
+                    .frame(width: max(0, liveWidth))
+                    .offset(x: liveOffset)
+                    .overlay(alignment: .leading) {
+                        if onTrim != nil { trimHandle(at: index, edge: .leading, pxPerSecond: pxPerSecond) }
+                    }
+                    .overlay(alignment: .trailing) {
+                        if onTrim != nil { trimHandle(at: index, edge: .trailing, pxPerSecond: pxPerSecond) }
+                    }
+                    .scaleEffect(isDragging ? 1.05 : 1.0)
+                    .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
+                    .offset(x: isDragging ? dragOffset : 0)
+                    .zIndex(isDragging || trimmingIndex == index ? 1 : 0)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        handleTap(on: clip)
+                    }
+                    .gesture(reorderGesture(for: index, pxPerSecond: pxPerSecond))
+            }
+            .frame(width: baseWidth, height: 40, alignment: .topLeading)
+            .padding(.horizontal, 1)
+        }
+    }
+
+    /// Compute the dragged clip's live width and its leading-edge offset during a trim
+    /// drag. Non-trimming clips return `(baseWidth, 0)` — no morph.
+    private func liveTrimMetrics(for index: Int, baseWidth: CGFloat) -> (width: CGFloat, offset: CGFloat) {
+        guard trimmingIndex == index, let edge = trimmingEdge else {
+            return (baseWidth, 0)
+        }
+        return TimelineView.liveTrimMetrics(edge: edge, baseWidth: baseWidth, pixelDelta: trimPixelDelta)
+    }
+
+    /// Pure: live-width and leading-offset for a clip being trimmed. Surfaced as a
+    /// static so the math is unit-testable without driving SwiftUI gestures.
+    ///
+    /// - Leading edge dragged right by `Δ` → width shrinks by `Δ`, content offsets right
+    ///   by `Δ` so the visual right edge stays anchored at its slot's right edge.
+    /// - Trailing edge drag → width changes by `Δ` (positive = wider, negative = narrower),
+    ///   no leading-edge offset.
+    internal static func liveTrimMetrics(
+        edge: TrimEdge,
+        baseWidth: CGFloat,
+        pixelDelta: CGFloat
+    ) -> (width: CGFloat, offset: CGFloat) {
+        switch edge {
+        case .leading:
+            return (baseWidth - pixelDelta, pixelDelta)
+        case .trailing:
+            return (baseWidth + pixelDelta, 0)
         }
     }
 
@@ -198,17 +240,19 @@ public struct TimelineView: View {
 
     private func trimGesture(at index: Int, edge: TrimEdge, pxPerSecond: Double) -> some Gesture {
         DragGesture(minimumDistance: 1)
-            .onChanged { _ in
+            .onChanged { value in
                 if onTrim == nil { return }
                 if trimmingIndex == nil {
                     trimmingIndex = index
                     trimmingEdge = edge
                 }
+                trimPixelDelta = value.translation.width
             }
             .onEnded { value in
                 defer {
                     trimmingIndex = nil
                     trimmingEdge = nil
+                    trimPixelDelta = 0
                 }
                 guard onTrim != nil, pxPerSecond > 0 else { return }
                 let (leading, trailing) = TimelineView.computeTrimDeltas(
