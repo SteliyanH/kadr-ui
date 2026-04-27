@@ -61,8 +61,10 @@ public struct TimelineView: View {
     /// - Parameters:
     ///   - video: The composition to visualize.
     ///   - currentTime: Optional binding to a playhead time. When non-`nil`, a vertical
-    ///     line is drawn at the corresponding x position; the timeline does not write
-    ///     back to the binding (scrubbing-by-tap is reserved for a future PR).
+    ///     line is drawn at the corresponding x position. Tapping or dragging on the
+    ///     thin scrub strip above the clip lane writes a new time back to this binding,
+    ///     clamped to `0...video.duration` (added in v0.4.2). Consumers wire the binding's
+    ///     `.onChange` to seek their `AVPlayer` if they want playback to follow.
     ///   - selectedClipID: Optional binding to a ``Kadr/ClipID`` for tap-to-select.
     ///     Tapping a media clip with a non-`nil` ``Kadr/Clip/clipID`` writes its ID
     ///     into the binding; tapping the already-selected clip clears it. Tapping
@@ -126,6 +128,11 @@ public struct TimelineView: View {
     @ViewBuilder
     private func clipStrip(pxPerSecond: Double, totalSeconds: Double) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            if currentTime != nil {
+                scrubStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+                    .frame(height: 14)
+            }
+
             HStack(spacing: 0) {
                 ForEach(video.clips.indices, id: \.self) { index in
                     clipBlock(at: index, pxPerSecond: pxPerSecond)
@@ -138,6 +145,53 @@ public struct TimelineView: View {
                     .frame(height: 12)
             }
         }
+    }
+
+    /// Thin tap-and-drag scrubber strip above the clip lane. Renders only when the
+    /// caller passed a `currentTime` binding. Any pointer interaction inside it writes
+    /// `x / pxPerSecond` (clamped to `0...totalSeconds`) back to the binding.
+    @ViewBuilder
+    private func scrubStrip(pxPerSecond: Double, totalSeconds: Double) -> some View {
+        Rectangle()
+            .fill(.gray.opacity(0.25))
+            .overlay(alignment: .topLeading) {
+                if let currentTime, pxPerSecond > 0 {
+                    let x = max(0, CMTimeGetSeconds(currentTime.wrappedValue)) * pxPerSecond
+                    Triangle()
+                        .fill(.red)
+                        .frame(width: 8, height: 8)
+                        .offset(x: x - 4, y: 0)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(scrubGesture(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds))
+    }
+
+    private func scrubGesture(pxPerSecond: Double, totalSeconds: Double) -> some Gesture {
+        // minimumDistance: 0 so a tap (no drag) also seeks.
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                writeScrub(at: value.location.x, pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+            }
+            .onEnded { value in
+                writeScrub(at: value.location.x, pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+            }
+    }
+
+    private func writeScrub(at x: CGFloat, pxPerSecond: Double, totalSeconds: Double) {
+        guard let binding = currentTime, pxPerSecond > 0 else { return }
+        let seconds = TimelineView.scrubTime(x: x, pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+        binding.wrappedValue = CMTime(seconds: seconds, preferredTimescale: 600)
+    }
+
+    /// Pure: convert an x-pixel position in the scrub strip to a clamped time in seconds.
+    /// Defensive against zero/negative `pxPerSecond` and out-of-range x values.
+    /// Internal so scrub math is unit-testable without driving SwiftUI gestures.
+    internal static func scrubTime(x: CGFloat, pxPerSecond: Double, totalSeconds: Double) -> Double {
+        guard pxPerSecond > 0 else { return 0 }
+        let raw = Double(x) / pxPerSecond
+        return min(max(raw, 0), max(0, totalSeconds))
     }
 
     @ViewBuilder
@@ -489,5 +543,19 @@ public struct TimelineView: View {
                 resolvedDurations[index] = metadata.duration
             }
         }
+    }
+}
+
+// MARK: - Triangle shape for the scrub-strip playhead marker
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }
