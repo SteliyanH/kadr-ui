@@ -324,6 +324,64 @@ struct TimelineViewTests {
         #expect(t == 0)
     }
 
+    // MARK: - Live reorder shift offsets (v0.4.3)
+
+    @Test func reorderShiftSourceGroupItselfIsZero() {
+        let widths: [CGFloat] = [100, 100, 100, 100]
+        let off = TimelineView.reorderShiftOffset(
+            index: 1, source: 1, groupSize: 1, target: 3, slotWidths: widths
+        )
+        #expect(off == 0)
+    }
+
+    @Test func reorderShiftMovingRightShiftsIntermediateLeft() {
+        let widths: [CGFloat] = [100, 100, 100, 100]
+        // Source=0, target=2: clip 1 and clip 2 should shift left by groupWidth (100).
+        let off1 = TimelineView.reorderShiftOffset(index: 1, source: 0, groupSize: 1, target: 2, slotWidths: widths)
+        let off2 = TimelineView.reorderShiftOffset(index: 2, source: 0, groupSize: 1, target: 2, slotWidths: widths)
+        let off3 = TimelineView.reorderShiftOffset(index: 3, source: 0, groupSize: 1, target: 2, slotWidths: widths)
+        #expect(off1 == -100)
+        #expect(off2 == -100)
+        #expect(off3 == 0)   // past target; doesn't shift
+    }
+
+    @Test func reorderShiftMovingLeftShiftsIntermediateRight() {
+        let widths: [CGFloat] = [100, 100, 100, 100]
+        // Source=3, target=1: clips 1 and 2 shift right by groupWidth (100).
+        let off0 = TimelineView.reorderShiftOffset(index: 0, source: 3, groupSize: 1, target: 1, slotWidths: widths)
+        let off1 = TimelineView.reorderShiftOffset(index: 1, source: 3, groupSize: 1, target: 1, slotWidths: widths)
+        let off2 = TimelineView.reorderShiftOffset(index: 2, source: 3, groupSize: 1, target: 1, slotWidths: widths)
+        #expect(off0 == 0)    // before target; doesn't shift
+        #expect(off1 == 100)
+        #expect(off2 == 100)
+    }
+
+    @Test func reorderShiftNoMovementZero() {
+        let widths: [CGFloat] = [100, 100, 100, 100]
+        for i in 0..<4 {
+            let off = TimelineView.reorderShiftOffset(index: i, source: 1, groupSize: 1, target: 1, slotWidths: widths)
+            #expect(off == 0)
+        }
+    }
+
+    @Test func reorderShiftWithGroupSizeTwo() {
+        let widths: [CGFloat] = [100, 100, 100, 100]
+        // Source group spans indices 0..1, each 100px wide → groupWidth=200.
+        // Moving to target=3, clips 2 and 3 shift left by 200.
+        let off2 = TimelineView.reorderShiftOffset(index: 2, source: 0, groupSize: 2, target: 3, slotWidths: widths)
+        let off3 = TimelineView.reorderShiftOffset(index: 3, source: 0, groupSize: 2, target: 3, slotWidths: widths)
+        #expect(off2 == -200)
+        #expect(off3 == -200)
+    }
+
+    @Test func reorderShiftSourceGroupTrailingTransitionIsZero() {
+        let widths: [CGFloat] = [100, 100, 100, 100]
+        let offSource = TimelineView.reorderShiftOffset(index: 0, source: 0, groupSize: 2, target: 3, slotWidths: widths)
+        let offTransition = TimelineView.reorderShiftOffset(index: 1, source: 0, groupSize: 2, target: 3, slotWidths: widths)
+        #expect(offSource == 0)
+        #expect(offTransition == 0)
+    }
+
     @Test @MainActor func scrubStripRendersWhenCurrentTimeBound() {
         // Smoke: presence of the scrub strip is gated on currentTime != nil. With it
         // bound, body should still resolve.

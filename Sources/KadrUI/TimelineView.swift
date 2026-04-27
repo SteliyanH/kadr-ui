@@ -201,8 +201,15 @@ public struct TimelineView: View {
         let baseWidth = max(0, seconds * pxPerSecond)
 
         if clip is Kadr.Transition {
+            // Transitions don't host their own gestures, but they shift visually during
+            // a sibling reorder: a transition that's part of the source group travels
+            // with the source; transitions between source and target shift to make space.
+            let offset = clipReorderOffset(for: index, pxPerSecond: pxPerSecond)
             transitionGlyph()
                 .frame(width: baseWidth)
+                .offset(x: offset)
+                .animation(.snappy(duration: 0.18), value: offset)
+                .zIndex(isPartOfSourceGroup(index) ? 1 : 0)
         } else {
             let isSelected = clip.clipID != nil && clip.clipID == selectedClipID?.wrappedValue
             let isDragging = draggingIndex == index
@@ -240,7 +247,8 @@ public struct TimelineView: View {
                     }
                     .scaleEffect(isDragging ? 1.05 : 1.0)
                     .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
-                    .offset(x: isDragging ? dragOffset : 0)
+                    .offset(x: clipReorderOffset(for: index, pxPerSecond: pxPerSecond))
+                    .animation(.snappy(duration: 0.18), value: reorderAnimationKey(for: index, pxPerSecond: pxPerSecond))
                     .zIndex(isDragging || trimmingIndex == index ? 1 : 0)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -251,6 +259,90 @@ public struct TimelineView: View {
             .frame(width: baseWidth, height: 40, alignment: .topLeading)
             .padding(.horizontal, 1)
         }
+    }
+
+    // MARK: - Live reorder offsets
+
+    /// True if `index` is the source media clip OR its trailing transition during an
+    /// in-flight reorder drag. Both travel together visually.
+    private func isPartOfSourceGroup(_ index: Int) -> Bool {
+        guard let src = draggingIndex else { return false }
+        let groupSize = sourceGroupSize(for: src)
+        return index >= src && index < src + groupSize
+    }
+
+    private func sourceGroupSize(for src: Int) -> Int {
+        (src + 1 < video.clips.count && video.clips[src + 1] is Kadr.Transition) ? 2 : 1
+    }
+
+    /// Horizontal offset to apply to clip `index` for live reorder feedback. The source
+    /// group rides the finger; clips between source and projected target shift left or
+    /// right by the source-group width to visually open the drop slot.
+    private func clipReorderOffset(for index: Int, pxPerSecond: Double) -> CGFloat {
+        guard let src = draggingIndex else { return 0 }
+        let groupSize = sourceGroupSize(for: src)
+        if index >= src && index < src + groupSize {
+            return dragOffset   // source group rides the finger
+        }
+        let widths: [CGFloat] = video.clips.indices.map {
+            CGFloat(CMTimeGetSeconds(durationForClip(at: $0))) * pxPerSecond
+        }
+        let target = TimelineView.computeTargetIndex(
+            source: src, dragX: dragOffset, slotWidths: widths
+        )
+        return TimelineView.reorderShiftOffset(
+            index: index,
+            source: src,
+            groupSize: groupSize,
+            target: target,
+            slotWidths: widths
+        )
+    }
+
+    /// Drives `.animation(value:)` so SwiftUI re-runs the snappy transition only on
+    /// state changes that should animate (a slot crossing), not on every drag pixel.
+    private func reorderAnimationKey(for index: Int, pxPerSecond: Double) -> Int {
+        guard let src = draggingIndex, src != index else { return 0 }
+        let widths: [CGFloat] = video.clips.indices.map {
+            CGFloat(CMTimeGetSeconds(durationForClip(at: $0))) * pxPerSecond
+        }
+        return TimelineView.computeTargetIndex(source: src, dragX: dragOffset, slotWidths: widths)
+    }
+
+    /// Pure: per-index horizontal shift offset for live reorder feedback. The source
+    /// group itself returns 0 here (the source's offset is `dragOffset`, applied by
+    /// the caller). Other clips shift only if they sit between source and target.
+    ///
+    /// - Returns: `-groupWidth` when the clip should slide left to fill the source's
+    ///   vacated slot, `+groupWidth` when it should slide right to make room before
+    ///   the target, otherwise `0`.
+    ///
+    /// Internal so the rule is unit-testable without driving SwiftUI gestures.
+    internal static func reorderShiftOffset(
+        index: Int,
+        source: Int,
+        groupSize: Int,
+        target: Int,
+        slotWidths widths: [CGFloat]
+    ) -> CGFloat {
+        // Skip the source group itself; caller handles its offset.
+        if index >= source && index < source + groupSize { return 0 }
+
+        var groupWidth: CGFloat = 0
+        for i in source..<source + groupSize where i < widths.count {
+            groupWidth += widths[i]
+        }
+
+        if target > source {
+            // Source moved right. Clips originally at (source + groupSize - 1, target]
+            // shift left by groupWidth to fill the vacated slot.
+            if index >= source + groupSize && index <= target { return -groupWidth }
+        } else if target < source {
+            // Source moved left. Clips originally at [target, source) shift right by
+            // groupWidth to make room before the target.
+            if index >= target && index < source { return groupWidth }
+        }
+        return 0
     }
 
     /// Compute the dragged clip's live width and its leading-edge offset during a trim
