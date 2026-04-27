@@ -4,6 +4,23 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.3] - 2026-04-27
+
+Final UX polish on `TimelineView`. Closes the v0.4.x deferred-polish list. No API changes; still requires Kadr ≥ 0.4.1.
+
+### Changed ([#24](https://github.com/SteliyanH/kadr-ui/pull/24))
+
+- **Live shifting of non-dragged clips during reorder.** Promised in #14 (*"other clips stay put for v1 (no live shifting)"*). Clips between source and projected target now slide horizontally to make space — `groupWidth` left when source moves right, `groupWidth` right when source moves left. Snap shifts use `.animation(.snappy(duration: 0.18))` keyed off the projected target index, so the transition fires only on slot crossings, not on every drag pixel.
+- **The source's trailing transition now travels with the source during drag.** Latent visual bug from #14 — when the source had `groupSize == 2`, the transition glyph stayed put while the source floated, then jumped to its new position only on release. It now offsets by `dragOffset` alongside the source for the full drag.
+
+### Tests
+
+- 6 new tests across `TimelineViewTests` covering the new `reorderShiftOffset` static helper (source-itself-zero, move-right / move-left intermediate shifts, no-movement, `groupSize=2` cases). Suite: 50 → 56.
+
+### Known limitations
+
+- The `Range.reduce(CGFloat(0)) { ... }` form segfaulted Swift Testing's runner under `--filter` while writing this PR; replaced with an explicit `for`-loop. Possibly a runner/compiler quirk; flagged here in case anyone hits it.
+
 ## [0.4.2] - 2026-04-27
 
 UX polish on `TimelineView`. Two deferred items from the v0.4.1 cycle land here. Zero API breakage; the `currentTime` binding becomes bidirectional and a live-resize behavior is added during trim drags.
