@@ -31,4 +31,13 @@ struct VideoPreviewTests {
         }
         _ = preview.body
     }
+
+    @Test @MainActor func constructsWithReloadToken() {
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 1.0)
+        }
+        _ = VideoPreview(video, reloadToken: AnyHashable(42)).body
+        _ = VideoPreview(video, reloadToken: AnyHashable("v2")) { _ in }.body
+    }
 }

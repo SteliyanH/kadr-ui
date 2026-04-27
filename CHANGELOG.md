@@ -4,6 +4,30 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.4] - 2026-04-27
+
+Catch-up + polish patch. Bumps the Kadr dep floor to `0.5.0` so the new components in this release can lean on Kadr 0.5's `Overlay.visibilityRange`. Pure additive — every v0.4.3 call site continues to compile.
+
+### Added — Catch-up to Kadr 0.5
+
+- **`OverlayHost` time-aware visibility.** New `currentTime: CMTime?` parameter on the `OverlayHost` initializer. When non-`nil`, overlays whose `Overlay.visibilityRange` does not contain `currentTime` are skipped. Untimed overlays (and `currentTime == nil`) render unconditionally. Wire to your `AVPlayer.currentItem` periodic time observer to match the export's overlay timing.
+- **Static helper `OverlayHost.isVisible(overlay:at:)`** for unit-testing the gating logic in isolation.
+
+### Added — Polish
+
+- **`OverlayHost` content-mode support.** New `contentMode: ContentMode` parameter (`.fit` default, `.fill`, `.stretch`). `.fit` lets a parent host the overlay layer without pinning the aspect ratio — overlays now appear inside the letterboxed display rect, not in the bands. `.stretch` matches pre-v0.4.4 behavior for callers using `.aspectRatio(...)` on the parent. Static helper `OverlayHost.containerFrame(...)` is exposed (package-internal) for unit tests.
+- **`ThumbnailStrip` failure surfacing.** New `onThumbnailFailure: ((Int, Error) -> Void)?` parameter mirrors `VideoPreview.onLoadFailure`. Slot still falls back to the gray placeholder; the callback fires with the slot index and underlying error so consumers can log or retry.
+- **`VideoPreview` reload-on-change.** Replaces a latent bug where swapping the `Video` left the player bound to the first composition. The `.task` now keys off a coarse fingerprint over `clips.count` / `overlays.count` / `audioTracks.count` / `duration`. New `reloadToken: AnyHashable?` parameter for callers who edit a clip in-place and need explicit reload (the structural fingerprint can't catch e.g. `trimRange` changes that don't shift counts).
+
+### Tests
+
+- 11 new tests across `OverlayHostHelpersTests` (visibility gating + content-mode math) and additive constructor checks on `OverlayHostTests`, `ThumbnailStripTests`, `VideoPreviewTests`. Suite: 56 → 67.
+
+### Compatibility
+
+- **Requires Kadr ≥ 0.5.0** (was 0.4.0). The dep floor moves up because `OverlayHost.isVisible` reads `Overlay.visibilityRange`, added in Kadr 0.5.
+- No breaking changes to existing call sites. `OverlayHost(video)` and `OverlayHost(video) { ... }` continue to compile and behave as before — except `OverlayHost(video)` now defaults to `.fit`. Callers that previously relied on `.aspectRatio(...)` on the parent will see identical layout (matching aspect → `.fit` and `.stretch` produce the same frame). Callers that did not pin the aspect ratio will see overlays correctly aligned to the video for the first time; if you want the old (misaligned) behavior, pass `contentMode: .stretch`.
+
 ## [0.4.3] - 2026-04-27
 
 Final UX polish on `TimelineView`. Closes the v0.4.x deferred-polish list. No API changes; still requires Kadr ≥ 0.4.1.

@@ -28,6 +28,15 @@ struct OverlayHostTests {
         _ = OverlayHost(sampleVideo(withOverlays: true)).body
     }
 
+    @Test @MainActor func constructsWithContentModeAndCurrentTime() {
+        let video = sampleVideo(withOverlays: true)
+        _ = OverlayHost(video, contentMode: .fit).body
+        _ = OverlayHost(video, contentMode: .fill).body
+        _ = OverlayHost(video, contentMode: .stretch).body
+        _ = OverlayHost(video, currentTime: .zero).body
+        _ = OverlayHost(video, contentMode: .fit, currentTime: .zero).body
+    }
+
     @Test @MainActor func constructsWithCustomRenderer() {
         let video = sampleVideo(withOverlays: true)
         let host = OverlayHost(video) { overlay in
