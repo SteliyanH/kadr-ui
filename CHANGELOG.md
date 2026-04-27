@@ -4,6 +4,22 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — v0.5.0 in progress
+
+Tier 1 of the multi-lane `TimelineView` cycle (see [DESIGN.md](DESIGN.md#v05--multi-lane-timeline)). Surface only — no rendering changes yet. Tier 2 wires these helpers into `TimelineView.body`.
+
+### Added
+
+- Bumped Kadr dep floor to `0.6.0` (uses `Track`, `Clip.startTime`).
+- Package-internal lane types: `LaneKind`, `LaneItem`, `ItemKind`. `Equatable` + `Sendable`.
+- `TimelineView.assignLanes(for:includeAudio:)` — pure helper that maps a `Video` into ordered lanes. Lane order: implicit chain → tracks (declaration order) → free-floater rows (greedy-packed) → audio.
+- `TimelineView.packFreeFloaters(_:)` — greedy interval-packs free-floaters into the minimum non-overlapping rows. Edge-touching ranges share a row.
+- 17 new unit tests across `TimelineLanesTests` covering the assignment algorithm + packing helper. Suite: 67 → 84.
+
+### Notes
+
+- New static helpers are explicitly `nonisolated` to keep the pure helpers usable from any actor context (the `View`-conformance MainActor inheritance otherwise traps inside `compactMap` closures during isolation checks).
+
 ## [0.4.4] - 2026-04-27
 
 Catch-up + polish patch. Bumps the Kadr dep floor to `0.5.0` so the new components in this release can lean on Kadr 0.5's `Overlay.visibilityRange`. Pure additive — every v0.4.3 call site continues to compile.
