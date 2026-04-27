@@ -35,6 +35,8 @@ public struct TimelineView: View {
     private let video: Video
     private let currentTime: Binding<CMTime>?
     private let selectedClipID: Binding<ClipID?>?
+    private let laneHeight: CGFloat
+    private let laneSpacing: CGFloat
     private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
     private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
 
@@ -92,12 +94,16 @@ public struct TimelineView: View {
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
         selectedClipID: Binding<ClipID?>? = nil,
+        laneHeight: CGFloat = 40,
+        laneSpacing: CGFloat = 4,
         onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
         onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
     ) {
         self.video = video
         self.currentTime = currentTime
         self.selectedClipID = selectedClipID
+        self.laneHeight = laneHeight
+        self.laneSpacing = laneSpacing
         self.onReorder = onReorder
         self.onTrim = onTrim
     }
@@ -106,9 +112,19 @@ public struct TimelineView: View {
         GeometryReader { geometry in
             let totalSeconds = compositionDuration()
             let pxPerSecond = totalSeconds > 0 ? geometry.size.width / totalSeconds : 0
+            let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
 
             ZStack(alignment: .topLeading) {
-                clipStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+                if lanes.count <= 1 {
+                    // Chain-only short-circuit — pixel-identical to v0.4.x.
+                    clipStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+                } else {
+                    multiLaneStrip(
+                        lanes: lanes,
+                        pxPerSecond: pxPerSecond,
+                        totalSeconds: totalSeconds
+                    )
+                }
                 if let currentTime, totalSeconds > 0 {
                     playhead(
                         at: CMTimeGetSeconds(currentTime.wrappedValue),
@@ -120,6 +136,85 @@ public struct TimelineView: View {
         }
         .task {
             await resolveDurations()
+        }
+    }
+
+    // MARK: - Multi-lane strip (v0.5)
+
+    /// Multi-lane render — engaged when the composition has Tracks or `.at(time:)`
+    /// clips. Each lane renders read-only blocks positioned absolutely on the
+    /// shared time axis. Edit gestures (reorder/trim) are NOT preserved on lane 0
+    /// in this path — they only apply to the chain-only short-circuit. Lane-0
+    /// editing in multi-track compositions is deferred to v0.5.x.
+    @ViewBuilder
+    private func multiLaneStrip(
+        lanes: [(LaneKind, [LaneItem])],
+        pxPerSecond: Double,
+        totalSeconds: Double
+    ) -> some View {
+        VStack(alignment: .leading, spacing: laneSpacing) {
+            if currentTime != nil {
+                scrubStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+                    .frame(height: 14)
+            }
+            ForEach(lanes.indices, id: \.self) { i in
+                laneRow(
+                    lane: lanes[i],
+                    pxPerSecond: pxPerSecond,
+                    totalSeconds: totalSeconds
+                )
+                .frame(height: laneHeight)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func laneRow(
+        lane: (LaneKind, [LaneItem]),
+        pxPerSecond: Double,
+        totalSeconds: Double
+    ) -> some View {
+        let totalWidth = max(0, totalSeconds * pxPerSecond)
+        ZStack(alignment: .topLeading) {
+            // Lane background — subtle, distinguishes adjacent lanes.
+            RoundedRectangle(cornerRadius: 2)
+                .fill(.gray.opacity(0.08))
+                .frame(width: totalWidth, height: laneHeight)
+            ForEach(lane.1.indices, id: \.self) { i in
+                let item = lane.1[i]
+                laneItemBlock(item: item, pxPerSecond: pxPerSecond)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func laneItemBlock(item: LaneItem, pxPerSecond: Double) -> some View {
+        let x = max(0, CMTimeGetSeconds(item.startTime) * pxPerSecond)
+        let w = max(0, CMTimeGetSeconds(item.duration) * pxPerSecond)
+        let isSelected = selectedClipID != nil && item.clipID != nil && selectedClipID?.wrappedValue == item.clipID
+        let view = RoundedRectangle(cornerRadius: 4)
+            .fill(laneItemColor(item.kind))
+            .frame(width: w, height: laneHeight)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
+            )
+            .offset(x: x)
+
+        if let id = item.clipID, let binding = selectedClipID {
+            view.onTapGesture { binding.wrappedValue = id }
+        } else {
+            view
+        }
+    }
+
+    private func laneItemColor(_ kind: ItemKind) -> Color {
+        switch kind {
+        case .video: return .blue.opacity(0.85)
+        case .image: return .green.opacity(0.85)
+        case .title: return .orange.opacity(0.85)
+        case .transition: return .gray.opacity(0.5)
+        case .audio: return .purple.opacity(0.6)
         }
     }
 
@@ -605,12 +700,35 @@ public struct TimelineView: View {
 
     // MARK: - Durations
 
+    /// Composition duration in seconds — used as the time-axis denominator. In v0.5
+    /// this consults the lane assignment so Tracks and free-floaters are included,
+    /// not just the implicit chain. Returns `0` when nothing has been resolved yet.
+    /// Chain-only compositions produce the same value as v0.4.x's pure-sum walk.
     private func compositionDuration() -> Double {
-        var total: CMTime = .zero
-        for index in video.clips.indices {
-            total = CMTimeAdd(total, durationForClip(at: index))
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        var maxEnd: CMTime = .zero
+        for (kind, items) in lanes {
+            // Implicit chain duration uses durationForClip so async-resolved
+            // VideoClip durations are honored on first appear.
+            if case .implicitChain = kind {
+                var cursor: CMTime = .zero
+                for index in video.clips.indices {
+                    let clip = video.clips[index]
+                    if clip is Track { continue }
+                    if clip.startTime != nil { continue }
+                    if clip is Kadr.Transition { continue }  // doesn't advance the chain cursor
+                    cursor = CMTimeAdd(cursor, durationForClip(at: index))
+                }
+                if CMTimeCompare(cursor, maxEnd) > 0 { maxEnd = cursor }
+                continue
+            }
+            // Other lanes use the synchronous duration the assignment helper computed.
+            for item in items {
+                let end = CMTimeAdd(item.startTime, item.duration)
+                if CMTimeCompare(end, maxEnd) > 0 { maxEnd = end }
+            }
         }
-        return CMTimeGetSeconds(total)
+        return CMTimeGetSeconds(maxEnd)
     }
 
     private func durationForClip(at index: Int) -> CMTime {

@@ -6,19 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased] — v0.5.0 in progress
 
-Tier 1 of the multi-lane `TimelineView` cycle (see [DESIGN.md](DESIGN.md#v05--multi-lane-timeline)). Surface only — no rendering changes yet. Tier 2 wires these helpers into `TimelineView.body`.
+Tiers 1 and 2 of the multi-lane `TimelineView` cycle (see [DESIGN.md](DESIGN.md#v05--multi-lane-timeline)). Audio lanes (tier 3) and polish (tier 4) follow in subsequent PRs before the v0.5.0 release.
 
-### Added
+### Added — Tier 1 (lane assignment helpers)
 
 - Bumped Kadr dep floor to `0.6.0` (uses `Track`, `Clip.startTime`).
 - Package-internal lane types: `LaneKind`, `LaneItem`, `ItemKind`. `Equatable` + `Sendable`.
 - `TimelineView.assignLanes(for:includeAudio:)` — pure helper that maps a `Video` into ordered lanes. Lane order: implicit chain → tracks (declaration order) → free-floater rows (greedy-packed) → audio.
 - `TimelineView.packFreeFloaters(_:)` — greedy interval-packs free-floaters into the minimum non-overlapping rows. Edge-touching ranges share a row.
-- 17 new unit tests across `TimelineLanesTests` covering the assignment algorithm + packing helper. Suite: 67 → 84.
+- New static helpers are explicitly `nonisolated` (the `View`-conformance MainActor inheritance otherwise traps inside `compactMap` closures during isolation checks).
 
-### Notes
+### Added — Tier 2 (multi-lane render)
 
-- New static helpers are explicitly `nonisolated` to keep the pure helpers usable from any actor context (the `View`-conformance MainActor inheritance otherwise traps inside `compactMap` closures during isolation checks).
+- New `TimelineView` init params `laneHeight: CGFloat = 40` and `laneSpacing: CGFloat = 4`. Defaults match the existing v0.4.x chain row sizing.
+- `TimelineView.body` now branches on `assignLanes(...)` — a chain-only composition (single lane) takes the existing v0.4.x render path unchanged (pixel-identical, edit gestures preserved). A multi-track composition (Tracks or `.at(time:)` clips) takes a new multi-lane render path that stacks read-only lane rows with absolutely-positioned blocks on a shared time axis.
+- `compositionDuration()` now consults the lane assignment, so the time axis spans the full multi-track composition (Tracks and free-floaters included). Chain-only path is identical to v0.4.x.
+- Selection (`selectedClipID`) honors `ClipID` on any lane in the multi-lane render — tap a clip on a Track lane or a free-floater lane to update the binding.
+- Total tests: 87 (was 67 before v0.5.0 work).
+
+### Tier 2 deferral
+
+- **Edit gestures (reorder, trim) are preserved only on the chain-only render path.** Multi-track compositions render every lane (including the implicit chain) read-only in v0.5.0. Index-translation between the original `video.clips` array and the chain-only sub-array adds complexity that's better staged into a v0.5.x edit-in-multi-track follow-up. The DESIGN-doc commitment "edit gestures preserved on lane 0" is honored only on the chain-only short-circuit; flag captured here to avoid surprise.
 
 ## [0.4.4] - 2026-04-27
 
