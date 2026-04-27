@@ -33,4 +33,12 @@ struct ThumbnailStripTests {
         }
         _ = ThumbnailStrip(video, count: 0).body
     }
+
+    @Test @MainActor func constructsWithFailureCallback() {
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 3.0)
+        }
+        _ = ThumbnailStrip(video, count: 5) { _, _ in }.body
+    }
 }

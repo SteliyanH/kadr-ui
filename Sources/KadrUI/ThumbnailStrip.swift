@@ -23,9 +23,10 @@ import AppKit
 ///
 /// **Lifecycle.** All thumbnails are generated in parallel on first appear via a
 /// `TaskGroup`. Slots populate as their frames complete; slots whose generation fails
-/// silently render an empty placeholder so the strip's spacing stays stable. The video
-/// is captured at first appear — use `.id(video)` on the parent if the composition can
-/// change while the strip is on screen.
+/// render an empty placeholder so the strip's spacing stays stable. Pass an
+/// `onThumbnailFailure` callback to surface those errors. The video is captured at first
+/// appear — use `.id(video)` on the parent if the composition can change while the
+/// strip is on screen.
 ///
 /// **Empty composition.** If ``Kadr/Video/duration`` is zero (e.g. an untrimmed
 /// `VideoClip` whose asset hasn't been loaded), the strip renders nothing.
@@ -34,6 +35,7 @@ public struct ThumbnailStrip: View {
 
     private let video: Video
     private let count: Int
+    private let onThumbnailFailure: ((Int, Error) -> Void)?
 
     @State private var thumbnails: [PlatformImage?]
 
@@ -42,9 +44,17 @@ public struct ThumbnailStrip: View {
     ///   - video: The Kadr composition.
     ///   - count: Number of thumbnails to generate. Defaults to `10`. Values `<= 0`
     ///     render an empty strip.
-    public init(_ video: Video, count: Int = 10) {
+    ///   - onThumbnailFailure: Optional callback fired with the slot index and the error
+    ///     when an individual thumbnail fails to render. The slot still falls back to a
+    ///     gray placeholder. Called on `MainActor`.
+    public init(
+        _ video: Video,
+        count: Int = 10,
+        onThumbnailFailure: ((Int, Error) -> Void)? = nil
+    ) {
         self.video = video
         self.count = count
+        self.onThumbnailFailure = onThumbnailFailure
         // Pre-size the array so SwiftUI has stable layout from first frame.
         self._thumbnails = State(initialValue: Array(repeating: nil, count: max(count, 0)))
     }
@@ -89,7 +99,11 @@ public struct ThumbnailStrip: View {
         // (single AVAssetImageGenerator call) that the lost parallelism is acceptable.
         for i in 0..<count {
             let t = step * Double(i)
-            thumbnails[i] = try? await video.thumbnail(at: t)
+            do {
+                thumbnails[i] = try await video.thumbnail(at: t)
+            } catch {
+                onThumbnailFailure?(i, error)
+            }
         }
     }
 }

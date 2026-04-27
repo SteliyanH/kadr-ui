@@ -1,5 +1,6 @@
 import SwiftUI
 import Kadr
+import CoreMedia
 
 /// A SwiftUI overlay layer that renders a Kadr ``Kadr/Video``'s overlays over preview content.
 ///
@@ -24,10 +25,17 @@ import Kadr
 /// per-overlay basis: returning a non-`nil` view replaces the default; returning `nil`
 /// (or omitting the closure) falls back to the default.
 ///
-/// **Layout contract.** `OverlayHost` assumes its own bounds equal the video's display
-/// rectangle — i.e. the parent uses `.aspectRatio(...)` so the container matches the
-/// composition's aspect ratio with no letterboxing. If the parent letterboxes, overlays
-/// will appear in the letterbox bands, not aligned to the video.
+/// **Layout contract.** Overlays are positioned inside the video's display rectangle,
+/// which is derived from the host's bounds and the chosen `contentMode` (default `.fit`).
+/// Use `.fit` (default) for letterboxed parents, `.fill` for fill-and-crop parents, or
+/// `.stretch` for parents that pin the aspect ratio with `.aspectRatio(...)`. With
+/// `.stretch`, overlays scale x/y independently — matching the pre-v0.4.4 behavior.
+///
+/// **Time-aware visibility.** Pass `currentTime` to honor each overlay's
+/// ``Kadr/Overlay/visibilityRange``. Overlays with a non-`nil` range render only while
+/// `currentTime` is inside the range. Overlays without a range always render. Without
+/// `currentTime`, all overlays render unconditionally (preview matches export of an
+/// untimed composition).
 ///
 /// **Overlays without explicit `size`.** Kadr's `Overlay.size` is optional. When `nil`,
 /// `OverlayHost` uses a default frame of 30% × 30% of the canvas as a v1 placeholder.
@@ -36,7 +44,22 @@ import Kadr
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct OverlayHost: View {
 
+    /// Strategy for fitting the composition's display rectangle inside the host's bounds.
+    public enum ContentMode: Sendable {
+        /// Match the composition's aspect ratio inside the bounds, letterboxing on the
+        /// short axis. Overlays render only inside the letterboxed display rect.
+        case fit
+        /// Fill the bounds, cropping the long axis of the composition. Overlays still
+        /// render in composition coordinates; parts outside the host bounds are clipped.
+        case fill
+        /// Scale x and y independently to fill the bounds. Matches pre-v0.4.4 behavior.
+        /// Use this when the parent pins the aspect ratio with `.aspectRatio(...)`.
+        case stretch
+    }
+
     private let video: Video
+    private let contentMode: ContentMode
+    private let currentTime: CMTime?
     private let customRenderer: ((any Overlay) -> AnyView?)?
     private var onTapHandler: ((LayerID) -> Void)?
     private var onDragChangedHandler: ((LayerID, CGSize) -> Void)?
@@ -45,11 +68,23 @@ public struct OverlayHost: View {
     /// Create an overlay host for `video`.
     /// - Parameters:
     ///   - video: The Kadr composition whose ``Kadr/Video/overlays`` are rendered.
+    ///   - contentMode: How the composition's display rectangle fits inside the host's
+    ///     bounds. Defaults to `.fit`.
+    ///   - currentTime: Composition time used to honor each overlay's
+    ///     ``Kadr/Overlay/visibilityRange``. When `nil` (the default), all overlays render
+    ///     unconditionally.
     ///   - customRenderer: Optional per-overlay renderer. Return a view to replace the
     ///     default rendering for that overlay; return `nil` to fall through to the
     ///     built-in renderer.
-    public init(_ video: Video, customRenderer: ((any Overlay) -> AnyView?)? = nil) {
+    public init(
+        _ video: Video,
+        contentMode: ContentMode = .fit,
+        currentTime: CMTime? = nil,
+        customRenderer: ((any Overlay) -> AnyView?)? = nil
+    ) {
         self.video = video
+        self.contentMode = contentMode
+        self.currentTime = currentTime
         self.customRenderer = customRenderer
     }
 
@@ -57,10 +92,22 @@ public struct OverlayHost: View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
                 ForEach(video.overlays.indices, id: \.self) { index in
-                    overlayView(for: video.overlays[index], in: geometry.size)
+                    let overlay = video.overlays[index]
+                    if Self.isVisible(overlay: overlay, at: currentTime) {
+                        overlayView(for: overlay, in: geometry.size)
+                    }
                 }
             }
         }
+    }
+
+    /// Returns `true` if `overlay` should render at composition time `time`. Pure helper
+    /// for unit tests. Untimed overlays (no `visibilityRange`) always return `true`.
+    /// When `time` is `nil`, returns `true` regardless of `visibilityRange`.
+    static func isVisible(overlay: any Overlay, at time: CMTime?) -> Bool {
+        guard let range = overlay.visibilityRange else { return true }
+        guard let t = time else { return true }
+        return range.containsTime(t)
     }
 
     @ViewBuilder
@@ -105,14 +152,58 @@ public struct OverlayHost: View {
             anchor: overlay.anchor,
             in: renderSize
         )
-        let scaleX = containerSize.width / renderSize.width
-        let scaleY = containerSize.height / renderSize.height
-        return CGRect(
-            x: renderFrame.origin.x * scaleX,
-            y: renderFrame.origin.y * scaleY,
-            width: renderFrame.size.width * scaleX,
-            height: renderFrame.size.height * scaleY
+        return Self.containerFrame(
+            renderFrame: renderFrame,
+            renderSize: renderSize,
+            containerSize: containerSize,
+            contentMode: contentMode
         )
+    }
+
+    /// Maps a frame from composition coordinates (`renderSize`) into host coordinates
+    /// (`containerSize`) under the given `contentMode`. Pure helper for unit tests.
+    static func containerFrame(
+        renderFrame: CGRect,
+        renderSize: CGSize,
+        containerSize: CGSize,
+        contentMode: ContentMode
+    ) -> CGRect {
+        guard renderSize.width > 0, renderSize.height > 0,
+              containerSize.width > 0, containerSize.height > 0 else { return .zero }
+
+        switch contentMode {
+        case .stretch:
+            let scaleX = containerSize.width / renderSize.width
+            let scaleY = containerSize.height / renderSize.height
+            return CGRect(
+                x: renderFrame.origin.x * scaleX,
+                y: renderFrame.origin.y * scaleY,
+                width: renderFrame.size.width * scaleX,
+                height: renderFrame.size.height * scaleY
+            )
+
+        case .fit, .fill:
+            let aspectComp = renderSize.width / renderSize.height
+            let aspectCont = containerSize.width / containerSize.height
+            let widthDominates = (contentMode == .fit) ? (aspectComp > aspectCont) : (aspectComp < aspectCont)
+            let scale: CGFloat
+            let displaySize: CGSize
+            if widthDominates {
+                scale = containerSize.width / renderSize.width
+                displaySize = CGSize(width: containerSize.width, height: renderSize.height * scale)
+            } else {
+                scale = containerSize.height / renderSize.height
+                displaySize = CGSize(width: renderSize.width * scale, height: containerSize.height)
+            }
+            let offsetX = (containerSize.width - displaySize.width) / 2
+            let offsetY = (containerSize.height - displaySize.height) / 2
+            return CGRect(
+                x: renderFrame.origin.x * scale + offsetX,
+                y: renderFrame.origin.y * scale + offsetY,
+                width: renderFrame.size.width * scale,
+                height: renderFrame.size.height * scale
+            )
+        }
     }
 
     private func defaultView(for overlay: any Overlay) -> AnyView {
