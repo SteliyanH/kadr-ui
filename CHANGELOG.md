@@ -4,6 +4,23 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — v0.4.2 in progress
+
+UX polish on `TimelineView`. Two deferred items from the v0.4.1 cycle land here. Zero API breakage; the `currentTime` binding becomes bidirectional and a live-resize behavior is added during trim drags.
+
+### Changed
+
+- **Live trim resize** ([#19](https://github.com/SteliyanH/kadr-ui/pull/19)) — during a trim handle drag, the dragged clip's visible width updates in real time and other clips don't reflow. The slot's reserved width stays constant; only the inner content morphs (extending past the slot if needed). On release the consumer rebuilds and slot widths recompute. Fulfills the "live resize is deferred to v0.4.2 polish" promise from #15.
+- **Tap-and-drag scrubbing** ([#20](https://github.com/SteliyanH/kadr-ui/pull/20)) — `currentTime: Binding<CMTime>?` is now bidirectional. When non-`nil`, a thin scrub strip renders above the clip lane with a small triangular playhead marker. Tapping or dragging anywhere in the strip writes a clamped time back to the binding. `DragGesture(minimumDistance: 0)` so a stationary tap also seeks. Consumers wire the binding's `.onChange` to seek their `AVPlayer`. Fulfills the "scrubbing-by-tap is reserved for a future PR" promise from #12.
+
+### Tests
+
+- 11 new tests across `TimelineViewTests` covering live trim metrics (5) and scrub-time conversion (6). Pure static helpers (`liveTrimMetrics`, `scrubTime`) factored out alongside the existing `computeTargetIndex` / `applyReorder` / `computeTrimDeltas`. Suite: 39 → 50.
+
+### Known deferred to v0.4.3 (or later)
+
+- Live shifting of non-dragged clips during reorder (so the dragged clip displaces neighbors visually as it crosses them). The current behavior — dragged clip floats with `zIndex(1)`, others stay put — is functional but less polished. Per the v0.4.2 plan agreed at the start of the cycle.
+
 ## [0.4.1] - 2026-04-27
 
 Adds `TimelineView` — the visual timeline component originally deferred from v0.4.0, now landing as the v0.4.1 feature release. Built up across four small PRs: read-only render → selection → reorder → trim. Requires Kadr ≥ 0.4.1 for the new `ClipID` type.
