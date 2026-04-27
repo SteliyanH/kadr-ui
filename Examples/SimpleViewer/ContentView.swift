@@ -26,6 +26,7 @@ struct SimpleViewerView: View {
     @State private var clips: [any Clip] = SimpleViewerView.makeDemoClips()
     @State private var selectedLayerID: LayerID?
     @State private var selectedClipID: ClipID?
+    @State private var playheadTime: CMTime = .zero
     @State private var liveDragOffsets: [String: CGSize] = [:]
 
     /// Rebuild the Video from current clips state on every render. The result-builder
@@ -91,6 +92,7 @@ struct SimpleViewerView: View {
 
             TimelineView(
                 video,
+                currentTime: $playheadTime,
                 selectedClipID: $selectedClipID,
                 onReorder: { _, _, newClips in
                     clips = newClips
@@ -99,7 +101,7 @@ struct SimpleViewerView: View {
                     clips[index] = Self.applyTrim(to: clips[index], leading: leading, trailing: trailing)
                 }
             )
-            .frame(height: 64)
+            .frame(height: 78)   // 14 (scrub strip) + 4 (spacing) + 40 (clips) + 4 + 12 (audio) ≈ 74
             .padding(8)
             .background(.gray.opacity(0.15), in: .rect(cornerRadius: 8))
 
@@ -114,7 +116,7 @@ struct SimpleViewerView: View {
     private var header: some View {
         VStack(spacing: 4) {
             Text("KadrUI Sample").font(.title2.bold())
-            Text("Tap overlays / clips to select. Drag clips to reorder, drag clip edges to trim.")
+            Text("Tap overlays / clips to select. Drag clips to reorder, drag clip edges to trim. Tap the scrub strip above the timeline to seek.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -132,6 +134,11 @@ struct SimpleViewerView: View {
             HStack {
                 Text("Selected clip:")
                 Text(selectedClipID?.rawValue ?? "—")
+                    .foregroundStyle(.secondary).monospaced()
+            }
+            HStack {
+                Text("Playhead:")
+                Text(String(format: "%.2fs", CMTimeGetSeconds(playheadTime)))
                     .foregroundStyle(.secondary).monospaced()
             }
             if !liveDragOffsets.isEmpty {
