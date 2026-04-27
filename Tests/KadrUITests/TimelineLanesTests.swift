@@ -1,0 +1,268 @@
+import Testing
+import CoreMedia
+import Foundation
+import Kadr
+@testable import KadrUI
+
+/// Pure unit tests for `assignLanes` and `packFreeFloaters`. No SwiftUI involvement.
+/// Each case constructs a `Video` (real Kadr DSL), calls the helper, and asserts on
+/// the returned lane structure. Helpers are package-internal — this file imports
+/// `@testable`.
+struct TimelineLanesTests {
+
+    // MARK: - Fixtures
+
+    private func cmt(_ seconds: Double) -> CMTime {
+        CMTime(seconds: seconds, preferredTimescale: 600)
+    }
+
+    private func image(_ duration: Double, id: String? = nil) -> ImageClip {
+        var clip = ImageClip(PlatformImage(), duration: duration)
+        if let id { clip = clip.id(ClipID(id)) }
+        return clip
+    }
+
+    // MARK: - assignLanes — basic shapes
+
+    @Test func emptyVideoEmitsOnlyImplicitChainLane() {
+        let video = Video {
+            ImageClip(PlatformImage(), duration: 0.0)  // builder requires at least one clip
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        #expect(lanes.count == 1)
+        #expect(lanes[0].0 == .implicitChain)
+    }
+
+    @Test func chainOnlyVideoEmitsSingleLane() {
+        let video = Video {
+            image(1.0, id: "a")
+            image(2.0, id: "b")
+            image(3.0, id: "c")
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        #expect(lanes.count == 1)
+        guard case .implicitChain = lanes[0].0 else {
+            Issue.record("expected implicitChain")
+            return
+        }
+        let items = lanes[0].1
+        #expect(items.count == 3)
+        #expect(items[0].clipID == ClipID("a"))
+        #expect(items[0].startTime == .zero)
+        #expect(items[1].startTime == cmt(1.0))
+        #expect(items[2].startTime == cmt(3.0))
+    }
+
+    @Test func videoWithSingleTrackAddsOneTrackLane() {
+        let video = Video {
+            image(5.0, id: "main")
+            Track(at: 1.0) {
+                image(2.0, id: "t1a")
+                image(2.0, id: "t1b")
+            }
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        #expect(lanes.count == 2)
+        guard case .implicitChain = lanes[0].0,
+              case let .track(idx, start, _) = lanes[1].0 else {
+            Issue.record("expected implicitChain then track")
+            return
+        }
+        #expect(idx == 0)
+        #expect(start == cmt(1.0))
+        let trackItems = lanes[1].1
+        #expect(trackItems.count == 2)
+        #expect(trackItems[0].startTime == cmt(1.0))
+        #expect(trackItems[1].startTime == cmt(3.0))
+    }
+
+    @Test func multipleTracksGetSequentialIndices() {
+        let video = Video {
+            image(10.0, id: "main")
+            Track(at: 1.0) { image(2.0, id: "ta") }
+            Track(at: 5.0) { image(2.0, id: "tb") }
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        #expect(lanes.count == 3)
+        if case let .track(i0, _, _) = lanes[1].0 { #expect(i0 == 0) } else { Issue.record("lane 1 not track") }
+        if case let .track(i1, _, _) = lanes[2].0 { #expect(i1 == 1) } else { Issue.record("lane 2 not track") }
+    }
+
+    @Test func freeFloatersPackOntoOneLaneWhenNonOverlapping() {
+        let video = Video {
+            image(10.0, id: "main")
+            image(2.0, id: "f1").at(time: 1.0)
+            image(2.0, id: "f2").at(time: 4.0)
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        #expect(lanes.count == 2)  // chain + 1 floater row
+        guard case .freeFloaters(let pack) = lanes[1].0 else {
+            Issue.record("expected freeFloaters lane")
+            return
+        }
+        #expect(pack == 0)
+        #expect(lanes[1].1.count == 2)
+    }
+
+    @Test func freeFloatersSplitWhenOverlapping() {
+        let video = Video {
+            image(10.0, id: "main")
+            image(3.0, id: "f1").at(time: 1.0)  // 1.0…4.0
+            image(3.0, id: "f2").at(time: 2.0)  // 2.0…5.0  — overlaps f1
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        #expect(lanes.count == 3)  // chain + 2 floater rows
+        guard case .freeFloaters(let p1) = lanes[1].0,
+              case .freeFloaters(let p2) = lanes[2].0 else {
+            Issue.record("expected two freeFloaters lanes")
+            return
+        }
+        #expect(p1 == 0)
+        #expect(p2 == 1)
+    }
+
+    @Test func mixedShapesProduceExpectedLaneOrder() {
+        let video = Video {
+            image(20.0, id: "main")
+            image(2.0, id: "f1").at(time: 1.0)
+            Track(at: 5.0) { image(2.0, id: "ta") }
+            image(2.0, id: "f2").at(time: 10.0)
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        // Order spec: chain → tracks → floaters → audio.
+        #expect(lanes.count == 3)
+        guard case .implicitChain = lanes[0].0,
+              case .track = lanes[1].0,
+              case .freeFloaters = lanes[2].0 else {
+            Issue.record("expected chain, track, floaters in that order")
+            return
+        }
+        #expect(lanes[2].1.count == 2)  // both floaters non-overlapping → one row
+    }
+
+    @Test func includeAudioAddsAudioLanesAtEnd() {
+        let musicURL = URL(fileURLWithPath: "/tmp/music.mp3")
+        let video = Video {
+            image(10.0, id: "main")
+        }
+        .audio { AudioTrack(url: musicURL) }
+
+        let withAudio = TimelineView.assignLanes(for: video, includeAudio: true)
+        let withoutAudio = TimelineView.assignLanes(for: video, includeAudio: false)
+        #expect(withAudio.count == withoutAudio.count + 1)
+        guard case let .audio(idx, label) = withAudio.last!.0 else {
+            Issue.record("expected last lane to be audio")
+            return
+        }
+        #expect(idx == 0)
+        #expect(label == "music.mp3")
+    }
+
+    @Test func transitionsStayInChainAndDoNotAdvanceCursor() {
+        let video = Video {
+            image(2.0, id: "a")
+            Transition.fade(duration: 0.5)
+            image(2.0, id: "b")
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        let items = lanes[0].1
+        #expect(items.count == 3)
+        #expect(items[0].startTime == .zero)
+        #expect(items[1].kind == .transition)
+        // Transition does NOT advance the cursor — clip "b" starts at 2.0 (after "a").
+        #expect(items[2].startTime == cmt(2.0))
+    }
+
+    // MARK: - packFreeFloaters — focused unit tests
+
+    @Test func packEmptyReturnsEmpty() {
+        #expect(TimelineView.packFreeFloaters([]).isEmpty)
+    }
+
+    @Test func packSingleFloaterReturnsOneRow() {
+        let item = LaneItem(clipID: nil, startTime: cmt(1), duration: cmt(2), kind: .video)
+        let rows = TimelineView.packFreeFloaters([item])
+        #expect(rows.count == 1)
+        #expect(rows[0].count == 1)
+    }
+
+    @Test func packTwoNonOverlappingPlacesOnSameRow() {
+        let a = LaneItem(clipID: nil, startTime: cmt(0), duration: cmt(2), kind: .video)
+        let b = LaneItem(clipID: nil, startTime: cmt(2), duration: cmt(2), kind: .video)
+        let rows = TimelineView.packFreeFloaters([a, b])
+        #expect(rows.count == 1)
+        #expect(rows[0].count == 2)
+    }
+
+    @Test func packTwoOverlappingSplitsToTwoRows() {
+        let a = LaneItem(clipID: nil, startTime: cmt(0), duration: cmt(3), kind: .video)
+        let b = LaneItem(clipID: nil, startTime: cmt(1), duration: cmt(2), kind: .video)
+        let rows = TimelineView.packFreeFloaters([a, b])
+        #expect(rows.count == 2)
+        #expect(rows[0].count == 1)
+        #expect(rows[1].count == 1)
+    }
+
+    @Test func packEdgeTouchingPlacesOnSameRow() {
+        // a ends at exactly 2.0; b starts at exactly 2.0 — counted as non-overlapping.
+        let a = LaneItem(clipID: nil, startTime: cmt(0), duration: cmt(2), kind: .video)
+        let b = LaneItem(clipID: nil, startTime: cmt(2), duration: cmt(1), kind: .video)
+        let rows = TimelineView.packFreeFloaters([a, b])
+        #expect(rows.count == 1)
+    }
+
+    @Test func packMixedThreeFloatersPacksGreedily() {
+        // a: 0…3, b: 1…2, c: 3…5
+        // Greedy: a → row 0; b overlaps a → row 1; c starts at 3, row 0 ended at 3 → row 0.
+        let a = LaneItem(clipID: nil, startTime: cmt(0), duration: cmt(3), kind: .video)
+        let b = LaneItem(clipID: nil, startTime: cmt(1), duration: cmt(1), kind: .video)
+        let c = LaneItem(clipID: nil, startTime: cmt(3), duration: cmt(2), kind: .video)
+        let rows = TimelineView.packFreeFloaters([a, b, c])
+        #expect(rows.count == 2)
+        #expect(rows[0].count == 2)  // a, c
+        #expect(rows[1].count == 1)  // b
+    }
+
+    @Test func packUnsortedInputProducesSameResult() {
+        let a = LaneItem(clipID: nil, startTime: cmt(3), duration: cmt(2), kind: .video)
+        let b = LaneItem(clipID: nil, startTime: cmt(0), duration: cmt(2), kind: .video)
+        let rows = TimelineView.packFreeFloaters([a, b])
+        #expect(rows.count == 1)  // sorted: 0…2 then 3…5 — non-overlapping
+        #expect(rows[0].count == 2)
+        // First placed should be the earliest (b), then a.
+        #expect(rows[0][0].startTime == .zero)
+        #expect(rows[0][1].startTime == cmt(3))
+    }
+
+    // MARK: - Integration on a v0.6-shaped Video
+
+    @Test func endToEndMultiTrackVideoMatchesExpectation() {
+        let musicURL = URL(fileURLWithPath: "/tmp/m.mp3")
+        let video = Video {
+            image(20.0, id: "main")
+            image(3.0, id: "pip1").at(time: 1.0)
+            image(2.0, id: "pip2").at(time: 2.0)  // overlaps pip1 → forces 2 floater rows
+            Track(at: 5.0) {
+                image(2.0, id: "ta")
+                Transition.fade(duration: 0.5)
+                image(2.0, id: "tb")
+            }
+        }
+        .audio { AudioTrack(url: musicURL) }
+
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: true)
+
+        // chain (1) + track (1) + floater rows (2) + audio (1) = 5
+        #expect(lanes.count == 5)
+
+        // Order check.
+        guard case .implicitChain = lanes[0].0,
+              case .track = lanes[1].0,
+              case .freeFloaters = lanes[2].0,
+              case .freeFloaters = lanes[3].0,
+              case .audio = lanes[4].0 else {
+            Issue.record("lane order does not match spec")
+            return
+        }
+    }
+}
