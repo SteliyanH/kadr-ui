@@ -35,4 +35,41 @@ struct TimelineViewTests {
         }
         _ = TimelineView(video).body
     }
+
+    // MARK: - Selection
+
+    @Test @MainActor func constructsWithSelectionBinding() {
+        @State var selected: ClipID? = nil
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 1.0).id("intro")
+            ImageClip(img, duration: 2.0).id("body")
+        }
+        _ = TimelineView(video, selectedClipID: $selected).body
+    }
+
+    @Test @MainActor func constructsWithBothPlayheadAndSelection() {
+        @State var time = CMTime(seconds: 1.0, preferredTimescale: 600)
+        @State var selected: ClipID? = "body"
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 1.0).id("intro")
+            ImageClip(img, duration: 2.0).id("body")
+        }
+        _ = TimelineView(video, currentTime: $time, selectedClipID: $selected).body
+    }
+
+    @Test @MainActor func constructsWithMixedIdentifiedAndUnidentifiedClips() {
+        // Selection should still work when only some clips have IDs. Unidentified
+        // clips and Transitions don't participate in tap-to-select; they should
+        // render normally with no crash.
+        @State var selected: ClipID? = nil
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 1.0).id("intro")
+            Kadr.Transition.dissolve(duration: 0.5)
+            ImageClip(img, duration: 2.0)   // no .id(...)
+        }
+        _ = TimelineView(video, selectedClipID: $selected).body
+    }
 }

@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/SteliyanH/kadr.git",
       "state" : {
-        "revision" : "f3fe389a44e8234a27b8cd468cba24318595d89b",
-        "version" : "0.4.0"
+        "revision" : "2b7f24e28429c599566ca7a03a7c07bdb1bc1e28",
+        "version" : "0.4.1"
       }
     }
   ],
