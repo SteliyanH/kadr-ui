@@ -252,4 +252,45 @@ struct TimelineViewTests {
         #expect(leading == .zero)
         #expect(trailing == .zero)
     }
+
+    // MARK: - Live trim metrics (v0.4.2)
+
+    @Test func liveTrimLeadingShrinksWithOffset() {
+        // Drag leading right by 30px from a 100px-wide clip:
+        // width 100 - 30 = 70, offset 30 (right edge stays anchored visually).
+        let (w, off) = TimelineView.liveTrimMetrics(edge: .leading, baseWidth: 100, pixelDelta: 30)
+        #expect(w == 70)
+        #expect(off == 30)
+    }
+
+    @Test func liveTrimLeadingExtendsWithNegativeOffset() {
+        // Drag leading left by 20px (extending the front):
+        // width 100 - (-20) = 120, offset -20 (visually shifts left).
+        let (w, off) = TimelineView.liveTrimMetrics(edge: .leading, baseWidth: 100, pixelDelta: -20)
+        #expect(w == 120)
+        #expect(off == -20)
+    }
+
+    @Test func liveTrimTrailingShrinksNoOffset() {
+        // Drag trailing left by 25px (trim from back):
+        // width 100 + (-25) = 75, no offset.
+        let (w, off) = TimelineView.liveTrimMetrics(edge: .trailing, baseWidth: 100, pixelDelta: -25)
+        #expect(w == 75)
+        #expect(off == 0)
+    }
+
+    @Test func liveTrimTrailingExtendsNoOffset() {
+        // Drag trailing right by 40px (extend back):
+        // width 100 + 40 = 140, no offset.
+        let (w, off) = TimelineView.liveTrimMetrics(edge: .trailing, baseWidth: 100, pixelDelta: 40)
+        #expect(w == 140)
+        #expect(off == 0)
+    }
+
+    @Test func liveTrimZeroDeltaIsIdentity() {
+        let (wL, offL) = TimelineView.liveTrimMetrics(edge: .leading,  baseWidth: 100, pixelDelta: 0)
+        let (wT, offT) = TimelineView.liveTrimMetrics(edge: .trailing, baseWidth: 100, pixelDelta: 0)
+        #expect(wL == 100 && offL == 0)
+        #expect(wT == 100 && offT == 0)
+    }
 }
