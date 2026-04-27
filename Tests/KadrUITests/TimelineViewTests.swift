@@ -186,4 +186,70 @@ struct TimelineViewTests {
         let result = TimelineView.applyReorder(clips: clips, from: 0, to: 1)
         #expect(result == nil)
     }
+
+    // MARK: - Trim
+
+    @Test @MainActor func constructsWithTrimCallback() {
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 2.0).id("a")
+        }
+        _ = TimelineView(video, onTrim: { _, _, _ in }).body
+    }
+
+    // MARK: - Trim math: computeTrimDeltas
+
+    @Test func trimLeadingPositiveTrims() {
+        // Drag leading handle right by 50px @ 100px/s = 0.5s trimmed off the front.
+        let (leading, trailing) = TimelineView.computeTrimDeltas(
+            edge: .leading, pixelDelta: 50, pxPerSecond: 100
+        )
+        #expect(CMTimeGetSeconds(leading) == 0.5)
+        #expect(trailing == .zero)
+    }
+
+    @Test func trimLeadingNegativeExtends() {
+        // Drag leading handle left by 30px @ 100px/s = -0.3s (extending the front).
+        let (leading, trailing) = TimelineView.computeTrimDeltas(
+            edge: .leading, pixelDelta: -30, pxPerSecond: 100
+        )
+        #expect(CMTimeGetSeconds(leading) == -0.3)
+        #expect(trailing == .zero)
+    }
+
+    @Test func trimTrailingPositiveTrims() {
+        // Drag trailing handle LEFT by 40px @ 100px/s = 0.4s trimmed off the back.
+        // Sign convention: negative pixelDelta on trailing = positive trim.
+        let (leading, trailing) = TimelineView.computeTrimDeltas(
+            edge: .trailing, pixelDelta: -40, pxPerSecond: 100
+        )
+        #expect(leading == .zero)
+        #expect(CMTimeGetSeconds(trailing) == 0.4)
+    }
+
+    @Test func trimTrailingNegativeExtends() {
+        // Drag trailing handle right by 60px @ 100px/s = -0.6s (extending the back).
+        let (leading, trailing) = TimelineView.computeTrimDeltas(
+            edge: .trailing, pixelDelta: 60, pxPerSecond: 100
+        )
+        #expect(leading == .zero)
+        #expect(CMTimeGetSeconds(trailing) == -0.6)
+    }
+
+    @Test func trimZeroPixelsZeroDeltas() {
+        let (leading, trailing) = TimelineView.computeTrimDeltas(
+            edge: .leading, pixelDelta: 0, pxPerSecond: 100
+        )
+        #expect(leading == .zero)
+        #expect(trailing == .zero)
+    }
+
+    @Test func trimZeroPxPerSecondReturnsZero() {
+        // Defensive: avoid divide-by-zero when the composition has zero duration.
+        let (leading, trailing) = TimelineView.computeTrimDeltas(
+            edge: .leading, pixelDelta: 100, pxPerSecond: 0
+        )
+        #expect(leading == .zero)
+        #expect(trailing == .zero)
+    }
 }

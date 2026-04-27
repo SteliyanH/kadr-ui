@@ -36,6 +36,7 @@ public struct TimelineView: View {
     private let currentTime: Binding<CMTime>?
     private let selectedClipID: Binding<ClipID?>?
     private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
+    private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
 
     /// Resolved durations for clips whose `Clip.duration` is synchronously `.zero`
     /// (currently only untrimmed `VideoClip`s). Keyed by index in `video.clips`.
@@ -45,6 +46,13 @@ public struct TimelineView: View {
     @State private var draggingIndex: Int?
     /// Horizontal pixel offset of the dragged clip from its resting position.
     @State private var dragOffset: CGFloat = 0
+
+    /// Index of the clip whose trim handle is currently being dragged, if any.
+    @State private var trimmingIndex: Int?
+    /// Whether the trim drag is on the leading (left) or trailing (right) handle.
+    @State private var trimmingEdge: TrimEdge?
+
+    internal enum TrimEdge { case leading, trailing }
 
     /// Create a timeline for `video`.
     /// - Parameters:
@@ -65,16 +73,28 @@ public struct TimelineView: View {
     ///     media clip during the reorder, so consumers never see a freestanding
     ///     ``Kadr/Transition`` mid-reorder. Drag uses a 10-pt minimum distance so it
     ///     does not conflict with `selectedClipID` taps.
+    ///   - onTrim: Optional callback fired when the user drags a clip's leading or
+    ///     trailing trim handle. Receives the clip index plus two `CMTime` deltas:
+    ///     `leadingTrim` (positive = trimmed from the front; negative = extended forward),
+    ///     `trailingTrim` (positive = trimmed from the back; negative = extended backward).
+    ///     The consumer applies the deltas to its own `Video` — for ``Kadr/VideoClip``,
+    ///     shift `trimRange` by the deltas; for ``Kadr/ImageClip`` / ``Kadr/TitleSequence``
+    ///     adjust `duration` by `-(leadingTrim + trailingTrim)` (only the back handle
+    ///     normally moves, since they have no source-asset front to retrieve). When
+    ///     `onTrim` is non-`nil`, thin grab handles render on the leading and trailing
+    ///     edges of every media-clip block.
     public init(
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
         selectedClipID: Binding<ClipID?>? = nil,
-        onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil
+        onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
+        onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
     ) {
         self.video = video
         self.currentTime = currentTime
         self.selectedClipID = selectedClipID
         self.onReorder = onReorder
+        self.onTrim = onTrim
     }
 
     public var body: some View {
@@ -148,6 +168,12 @@ public struct TimelineView: View {
                 )
                 .frame(width: width)
                 .padding(.horizontal, 1)
+                .overlay(alignment: .leading) {
+                    if onTrim != nil { trimHandle(at: index, edge: .leading, pxPerSecond: pxPerSecond) }
+                }
+                .overlay(alignment: .trailing) {
+                    if onTrim != nil { trimHandle(at: index, edge: .trailing, pxPerSecond: pxPerSecond) }
+                }
                 .scaleEffect(isDragging ? 1.05 : 1.0)
                 .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
                 .offset(x: isDragging ? dragOffset : 0)
@@ -158,6 +184,40 @@ public struct TimelineView: View {
                 }
                 .gesture(reorderGesture(for: index, pxPerSecond: pxPerSecond))
         }
+    }
+
+    @ViewBuilder
+    private func trimHandle(at index: Int, edge: TrimEdge, pxPerSecond: Double) -> some View {
+        let isActive = trimmingIndex == index && trimmingEdge == edge
+        Rectangle()
+            .fill(isActive ? Color.white : Color.white.opacity(0.5))
+            .frame(width: 4)
+            .contentShape(Rectangle().inset(by: -6))   // wider hit target than visual
+            .gesture(trimGesture(at: index, edge: edge, pxPerSecond: pxPerSecond))
+    }
+
+    private func trimGesture(at index: Int, edge: TrimEdge, pxPerSecond: Double) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { _ in
+                if onTrim == nil { return }
+                if trimmingIndex == nil {
+                    trimmingIndex = index
+                    trimmingEdge = edge
+                }
+            }
+            .onEnded { value in
+                defer {
+                    trimmingIndex = nil
+                    trimmingEdge = nil
+                }
+                guard onTrim != nil, pxPerSecond > 0 else { return }
+                let (leading, trailing) = TimelineView.computeTrimDeltas(
+                    edge: edge,
+                    pixelDelta: value.translation.width,
+                    pxPerSecond: pxPerSecond
+                )
+                onTrim?(index, leading, trailing)
+            }
     }
 
     private func reorderGesture(for index: Int, pxPerSecond: Double) -> some Gesture {
@@ -235,6 +295,37 @@ public struct TimelineView: View {
             cursor += widths[i]
         }
         return widths.count - 1
+    }
+
+    /// Pure: convert a pixel-distance drag on a leading/trailing trim handle into the
+    /// (leadingTrim, trailingTrim) `CMTime` pair surfaced by ``onTrim``.
+    ///
+    /// **Sign convention.** Positive means *trim* (clip got shorter on that side); negative
+    /// means *extend* (clip wants more material on that side; the consumer decides whether
+    /// the underlying asset / duration permits it).
+    /// - Leading edge dragged right (+px) → leadingTrim positive (front trimmed).
+    /// - Leading edge dragged left  (-px) → leadingTrim negative (extending front).
+    /// - Trailing edge dragged right (+px) → trailingTrim negative (extending back).
+    /// - Trailing edge dragged left  (-px) → trailingTrim positive (back trimmed).
+    ///
+    /// The non-dragged edge's delta is always `.zero`.
+    ///
+    /// Internal so trim math is unit-testable without driving SwiftUI gestures.
+    internal static func computeTrimDeltas(
+        edge: TrimEdge,
+        pixelDelta: CGFloat,
+        pxPerSecond: Double
+    ) -> (leading: CMTime, trailing: CMTime) {
+        guard pxPerSecond > 0 else { return (.zero, .zero) }
+        let seconds = Double(pixelDelta) / pxPerSecond
+        let cm = CMTime(seconds: seconds, preferredTimescale: 600)
+        switch edge {
+        case .leading:
+            return (cm, .zero)
+        case .trailing:
+            // Dragging trailing edge right (+px) extends the clip → trailingTrim is negative.
+            return (.zero, CMTime(seconds: -seconds, preferredTimescale: 600))
+        }
     }
 
     /// Pure: produce the reordered clips array, gluing the source media clip's trailing
