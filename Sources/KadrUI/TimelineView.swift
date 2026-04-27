@@ -35,10 +35,16 @@ public struct TimelineView: View {
     private let video: Video
     private let currentTime: Binding<CMTime>?
     private let selectedClipID: Binding<ClipID?>?
+    private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
 
     /// Resolved durations for clips whose `Clip.duration` is synchronously `.zero`
     /// (currently only untrimmed `VideoClip`s). Keyed by index in `video.clips`.
     @State private var resolvedDurations: [Int: CMTime] = [:]
+
+    /// Index of the media clip currently being dragged, if any.
+    @State private var draggingIndex: Int?
+    /// Horizontal pixel offset of the dragged clip from its resting position.
+    @State private var dragOffset: CGFloat = 0
 
     /// Create a timeline for `video`.
     /// - Parameters:
@@ -51,14 +57,24 @@ public struct TimelineView: View {
     ///     into the binding; tapping the already-selected clip clears it. Tapping
     ///     transitions or unidentified clips does nothing. The selected clip is
     ///     highlighted with a thicker, brighter border.
+    ///   - onReorder: Optional callback fired when the user drags a media clip to a new
+    ///     position. Receives the **source** index, the **target** index, and the
+    ///     **new clips array** ready to be passed back into a fresh ``Kadr/Video``
+    ///     composition. Kadr's `Video` is immutable — `TimelineView` does not mutate;
+    ///     the consumer rebuilds. Transitions automatically travel with their preceding
+    ///     media clip during the reorder, so consumers never see a freestanding
+    ///     ``Kadr/Transition`` mid-reorder. Drag uses a 10-pt minimum distance so it
+    ///     does not conflict with `selectedClipID` taps.
     public init(
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
-        selectedClipID: Binding<ClipID?>? = nil
+        selectedClipID: Binding<ClipID?>? = nil,
+        onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil
     ) {
         self.video = video
         self.currentTime = currentTime
         self.selectedClipID = selectedClipID
+        self.onReorder = onReorder
     }
 
     public var body: some View {
@@ -112,6 +128,7 @@ public struct TimelineView: View {
                 .frame(width: width)
         } else {
             let isSelected = clip.clipID != nil && clip.clipID == selectedClipID?.wrappedValue
+            let isDragging = draggingIndex == index
             RoundedRectangle(cornerRadius: 4)
                 .fill(clipColor(for: clip).opacity(isSelected ? 0.85 : 0.6))
                 .overlay(
@@ -131,17 +148,129 @@ public struct TimelineView: View {
                 )
                 .frame(width: width)
                 .padding(.horizontal, 1)
+                .scaleEffect(isDragging ? 1.05 : 1.0)
+                .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
+                .offset(x: isDragging ? dragOffset : 0)
+                .zIndex(isDragging ? 1 : 0)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     handleTap(on: clip)
                 }
+                .gesture(reorderGesture(for: index, pxPerSecond: pxPerSecond))
         }
+    }
+
+    private func reorderGesture(for index: Int, pxPerSecond: Double) -> some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                if onReorder == nil { return }
+                if draggingIndex == nil { draggingIndex = index }
+                dragOffset = value.translation.width
+            }
+            .onEnded { value in
+                defer {
+                    draggingIndex = nil
+                    dragOffset = 0
+                }
+                guard onReorder != nil else { return }
+                let target = computeTargetIndex(
+                    source: index,
+                    dragX: value.translation.width,
+                    pxPerSecond: pxPerSecond
+                )
+                handleReorder(from: index, to: target)
+            }
     }
 
     private func handleTap(on clip: any Clip) {
         guard let binding = selectedClipID, let id = clip.clipID else { return }
         // Tapping the already-selected clip clears the selection.
         binding.wrappedValue = (binding.wrappedValue == id) ? nil : id
+    }
+
+    // MARK: - Reorder math
+
+    private func computeTargetIndex(source: Int, dragX: CGFloat, pxPerSecond: Double) -> Int {
+        let widths: [CGFloat] = video.clips.indices.map {
+            CGFloat(CMTimeGetSeconds(durationForClip(at: $0))) * pxPerSecond
+        }
+        return TimelineView.computeTargetIndex(source: source, dragX: dragX, slotWidths: widths)
+    }
+
+    private func handleReorder(from sourceIndex: Int, to rawTarget: Int) {
+        guard let result = TimelineView.applyReorder(
+            clips: Array(video.clips),
+            from: sourceIndex,
+            to: rawTarget
+        ) else { return }
+        onReorder?(sourceIndex, result.targetIndex, result.newClips)
+    }
+
+    /// Pure: which slot does the dragged clip's center lie over after `dragX` pixels of
+    /// horizontal translation? Walks slot widths and returns the first slot whose
+    /// midpoint exceeds the projected finger x.
+    ///
+    /// Internal so `TimelineView`'s reorder math can be unit-tested without driving
+    /// SwiftUI gestures.
+    internal static func computeTargetIndex(
+        source: Int,
+        dragX: CGFloat,
+        slotWidths widths: [CGFloat]
+    ) -> Int {
+        guard !widths.isEmpty else { return 0 }
+        var sourceStart: CGFloat = 0
+        var cursor: CGFloat = 0
+        for i in widths.indices {
+            if i == source { sourceStart = cursor }
+            cursor += widths[i]
+        }
+        let fingerX = sourceStart + widths[source] / 2 + dragX
+
+        cursor = 0
+        for i in widths.indices {
+            let mid = cursor + widths[i] / 2
+            // `<=` so a finger sitting exactly on the source's own midpoint (no drag,
+            // or drag that returns to start) maps back to the source slot, not the next.
+            if fingerX <= mid { return i }
+            cursor += widths[i]
+        }
+        return widths.count - 1
+    }
+
+    /// Pure: produce the reordered clips array, gluing the source media clip's trailing
+    /// transition (if any) so it travels along. Returns `nil` for no-op moves (dropping
+    /// inside the source's own group). The returned `targetIndex` is where the source
+    /// media clip lands in the new array (always pointing at a media clip, never a
+    /// transition).
+    ///
+    /// Internal so `TimelineView`'s reorder math can be unit-tested without driving
+    /// SwiftUI gestures.
+    internal static func applyReorder(
+        clips: [any Clip],
+        from sourceIndex: Int,
+        to rawTarget: Int
+    ) -> (newClips: [any Clip], targetIndex: Int)? {
+        let groupSize = (sourceIndex + 1 < clips.count
+                         && clips[sourceIndex + 1] is Kadr.Transition) ? 2 : 1
+
+        if rawTarget >= sourceIndex && rawTarget < sourceIndex + groupSize { return nil }
+
+        var newClips = clips
+        let group = Array(newClips[sourceIndex..<sourceIndex + groupSize])
+        newClips.removeSubrange(sourceIndex..<sourceIndex + groupSize)
+
+        // Map the original-coordinate target into a new-array insertion index. We want
+        // the source's lead element to land at `rawTarget` in the FINAL array.
+        // - source > target: target slots are unchanged by the removal → insert at `rawTarget`.
+        // - source < target: target was past the removal; account for the (groupSize - 1)
+        //   slots that collapsed leftward between source and target.
+        let insertIndex = rawTarget > sourceIndex
+            ? rawTarget - (groupSize - 1)
+            : rawTarget
+        let clamped = max(0, min(insertIndex, newClips.count))
+
+        newClips.insert(contentsOf: group, at: clamped)
+        return (newClips, clamped)
     }
 
     @ViewBuilder
