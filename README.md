@@ -46,7 +46,7 @@ struct EditorScreen: View {
 | `ThumbnailStrip(_ video:, count:)` | Horizontal strip of evenly-spaced composition thumbnails | `Kadr.Video.thumbnail(at:)` |
 | `OverlayHost(_ video:, customRenderer:)` | Renders Kadr `Overlay`s as SwiftUI views over the player | `Kadr.Layout.resolveFrame(...)` |
 | `.onLayerTap` / `.onLayerDrag` | Gesture modifiers on `OverlayHost`, hit-tested through `LayerID` | `Kadr.LayerID` |
-| **`TimelineView`** *(v0.4.1, polished v0.4.2 / v0.4.3)* | Visual timeline with playhead, tap-to-select, drag-to-reorder (neighbors slide to make space), trim handles, live trim resize, tap-to-scrub | `Kadr.Video.clips`, `Kadr.ClipID` |
+| **`TimelineView`** *(v0.4.1, polished v0.4.2 / v0.4.3, multi-lane v0.5)* | Visual timeline with playhead, tap-to-select, drag-to-reorder (neighbors slide to make space), trim handles, live trim resize, tap-to-scrub. Stacks lanes for Kadr 0.6 multi-track compositions (`Track {}`, `.at(time:)`, audio tracks) | `Kadr.Video.clips`, `Kadr.ClipID`, `Kadr.Track` |
 
 ### Why a separate package?
 
@@ -71,6 +71,7 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.4.2 | ≥ 0.4.1 |
 | 0.4.3 | ≥ 0.4.1 |
 | 0.4.4 | ≥ 0.5.0 *(uses `Overlay.visibilityRange`)* |
+| 0.5.0 | ≥ 0.6.0 *(uses `Track`, `Clip.startTime`)* |
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 

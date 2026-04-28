@@ -4,36 +4,49 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — v0.5.0 in progress
+## [0.5.0] - 2026-04-28
 
-Tiers 1 and 2 of the multi-lane `TimelineView` cycle (see [DESIGN.md](DESIGN.md#v05--multi-lane-timeline)). Audio lanes (tier 3) and polish (tier 4) follow in subsequent PRs before the v0.5.0 release.
+Multi-lane `TimelineView` for Kadr 0.6 multi-track compositions. Built across four tiered PRs per the [DESIGN.md](DESIGN.md#v05--multi-lane-timeline) RFC. Pure additive — every v0.4.x chain-only call site continues to compile and renders pixel-identical to v0.4.x.
 
-### Added — Tier 1 (lane assignment helpers)
+**Compatibility:** requires Kadr ≥ 0.6.0 (uses `Track`, `Clip.startTime`).
 
-- Bumped Kadr dep floor to `0.6.0` (uses `Track`, `Clip.startTime`).
+### Added — Lane assignment helpers ([#30](https://github.com/SteliyanH/kadr-ui/pull/30))
+
 - Package-internal lane types: `LaneKind`, `LaneItem`, `ItemKind`. `Equatable` + `Sendable`.
-- `TimelineView.assignLanes(for:includeAudio:)` — pure helper that maps a `Video` into ordered lanes. Lane order: implicit chain → tracks (declaration order) → free-floater rows (greedy-packed) → audio.
+- `TimelineView.assignLanes(for:includeAudio:)` — pure helper mapping a `Video` into ordered lanes. Lane order: implicit chain → tracks (declaration order) → free-floater rows (greedy-packed) → audio.
 - `TimelineView.packFreeFloaters(_:)` — greedy interval-packs free-floaters into the minimum non-overlapping rows. Edge-touching ranges share a row.
 - New static helpers are explicitly `nonisolated` (the `View`-conformance MainActor inheritance otherwise traps inside `compactMap` closures during isolation checks).
 
-### Added — Tier 2 (multi-lane render)
+### Added — Multi-lane render ([#31](https://github.com/SteliyanH/kadr-ui/pull/31))
 
-- New `TimelineView` init params `laneHeight: CGFloat = 40` and `laneSpacing: CGFloat = 4`. Defaults match the existing v0.4.x chain row sizing.
-- `TimelineView.body` now branches on `assignLanes(...)` — a chain-only composition (single lane) takes the existing v0.4.x render path unchanged (pixel-identical, edit gestures preserved). A multi-track composition (Tracks or `.at(time:)` clips) takes a new multi-lane render path that stacks read-only lane rows with absolutely-positioned blocks on a shared time axis.
-- `compositionDuration()` now consults the lane assignment, so the time axis spans the full multi-track composition (Tracks and free-floaters included). Chain-only path is identical to v0.4.x.
-- Selection (`selectedClipID`) honors `ClipID` on any lane in the multi-lane render — tap a clip on a Track lane or a free-floater lane to update the binding.
-- Total tests: 87 (was 67 before v0.5.0 work).
+- New `TimelineView` init params `laneHeight: CGFloat = 40` and `laneSpacing: CGFloat = 4`. Defaults match v0.4.x chain row sizing.
+- `TimelineView.body` branches on `assignLanes(...)`: a chain-only composition takes the v0.4.x render path unchanged (pixel-identical, edit gestures preserved); a multi-track composition (Tracks or `.at(time:)` clips) takes a new multi-lane render with read-only lane rows positioned on a shared time axis.
+- `compositionDuration()` consults the lane assignment, so the time axis spans the full multi-track composition. Chain-only result is identical to v0.4.x.
+- Selection (`selectedClipID`) honors `ClipID` on any lane in the multi-lane render — tap a clip on a Track lane or free-floater lane to update the binding.
 
-### Added — Tier 3 (audio lanes)
+### Added — Audio lanes ([#32](https://github.com/SteliyanH/kadr-ui/pull/32))
 
-- New `TimelineView` init param `showAudioLanes: Bool = true`. Default matches v0.4.x behavior; pass `false` to hide audio in either render path.
-- In the multi-lane render, audio tracks now appear as additional lanes at the bottom of the stack (one lane per `Video.audioTracks` entry). Each lane is a colored block sized to the composition duration, labeled by the audio file's last path component.
-- Branch decision between chain-only and multi-lane paths now uses non-audio lane count, so a chain-only composition with one audio track still takes the v0.4.x single-lane render (which has audio rendered inline at the bottom of the strip).
-- Total tests: 89.
+- New `TimelineView` init param `showAudioLanes: Bool = true`. Default matches v0.4.x; pass `false` to hide audio in either render path.
+- Multi-lane render now includes audio tracks as additional lanes — one lane per `Video.audioTracks` entry, sized to composition duration.
+- Branch decision uses non-audio lane count, so a chain-only Video with audio still takes the v0.4.x single-lane render.
 
-### Tier 2 deferral
+### Added — Polish + docs
 
-- **Edit gestures (reorder, trim) are preserved only on the chain-only render path.** Multi-track compositions render every lane (including the implicit chain) read-only in v0.5.0. Index-translation between the original `video.clips` array and the chain-only sub-array adds complexity that's better staged into a v0.5.x edit-in-multi-track follow-up. The DESIGN-doc commitment "edit gestures preserved on lane 0" is honored only on the chain-only short-circuit; flag captured here to avoid surprise.
+- New `TimelineView` init param `showLaneLabels: Bool = false`. When `true`, each non-chain lane renders a small label at top-left ("Track 1", "Floaters", filename for audio).
+- Static helper `TimelineView.laneLabel(for:)` (package-internal) for unit-testing label semantics.
+- DocC catalog and `TimelineView` header updated with multi-lane behavior.
+- README compatibility table updated; components row mentions multi-lane.
+- `Examples/SimpleViewer` ships a new `MultiTrackViewerView` demonstrating the lane stack against a Kadr 0.6 multi-track Video.
+- CI workflow brought into byte-parity with the kadr repo (`on:` branch list).
+
+### Tests
+
+- 28 new tests across `TimelineLanesTests` (lane assignment + packing + label helpers) and `TimelineViewTests` (constructor + multi-track body smoke). Suite: 67 → 95.
+
+### Deferred to v0.5.x
+
+- **Edit gestures (reorder, trim) only apply on the chain-only render path.** Multi-track compositions render every lane read-only in v0.5.0 — including the implicit chain. The DESIGN-doc commitment "edit gestures preserved on lane 0" is honored on the chain-only short-circuit only. Index-translation between the full `video.clips` array and the chain sub-array is staged into a v0.5.x edit-in-multi-track follow-up.
+- Cross-lane drag, in-Track editing, audio waveforms, zoom + scroll, nested-Track expanded visualization. All explicitly out of scope per RFC.
 
 ## [0.4.4] - 2026-04-27
 

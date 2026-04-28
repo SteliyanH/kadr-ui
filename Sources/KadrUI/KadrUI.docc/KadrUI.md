@@ -4,7 +4,7 @@ SwiftUI components for Kadr — preview, scrub, and overlay-edit `Video` composi
 
 ## Overview
 
-KadrUI consumes [Kadr](https://github.com/SteliyanH/kadr) 0.4.x's public introspection and preview primitives to provide drop-in SwiftUI views: an `AVPlayer`-backed preview (``VideoPreview``), a horizontal thumbnail strip (``ThumbnailStrip``), an overlay layer with built-in renderers and a custom hook plus `LayerID`-routed gesture modifiers (``OverlayHost``), and a visual timeline with selection, drag-to-reorder, and trim handles (``TimelineView``).
+KadrUI consumes [Kadr](https://github.com/SteliyanH/kadr)'s public introspection and preview primitives to provide drop-in SwiftUI views: an `AVPlayer`-backed preview (``VideoPreview``), a horizontal thumbnail strip (``ThumbnailStrip``), an overlay layer with built-in renderers, a custom hook, and `LayerID`-routed gesture modifiers (``OverlayHost``), and a visual timeline with selection, drag-to-reorder, trim handles, and **multi-lane rendering for v0.6+ multi-track compositions** (``TimelineView``).
 
 ```swift
 import SwiftUI
@@ -42,7 +42,7 @@ struct EditorScreen: View {
 - ``OverlayHost/onLayerTap(_:)``
 - ``OverlayHost/onLayerDrag(onChanged:onEnded:)``
 
-### Timeline (v0.4.1+)
+### Timeline (v0.4.1+, multi-lane v0.5+)
 
 - ``TimelineView``
 

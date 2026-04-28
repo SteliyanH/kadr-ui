@@ -29,6 +29,14 @@ import Kadr
 /// **Read-only.** This v0.4.1 PR ships the read-only timeline. Selection, drag-to-reorder,
 /// and trim handles arrive in subsequent PRs as pure callbacks (Kadr's `Video` is
 /// immutable; the timeline surfaces user intent — consumers rebuild the `Video`).
+///
+/// **Multi-lane (v0.5+).** When the composition has Kadr 0.6 multi-track content
+/// (``Kadr/Track`` blocks or clips pinned with `.at(time:)`), the timeline switches to
+/// a stacked-lane render: lane 0 is the implicit chain, then one lane per `Track` in
+/// declaration order, then greedy-packed rows of free-floaters, then optional audio
+/// lanes. Chain-only compositions render unchanged from v0.4.x. Edit gestures
+/// (reorder/trim) apply only on the chain-only path in v0.5.0; lane-0 editing in
+/// multi-track compositions is staged into a v0.5.x follow-up.
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct TimelineView: View {
 
@@ -38,6 +46,7 @@ public struct TimelineView: View {
     private let laneHeight: CGFloat
     private let laneSpacing: CGFloat
     private let showAudioLanes: Bool
+    private let showLaneLabels: Bool
     private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
     private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
 
@@ -98,6 +107,7 @@ public struct TimelineView: View {
         laneHeight: CGFloat = 40,
         laneSpacing: CGFloat = 4,
         showAudioLanes: Bool = true,
+        showLaneLabels: Bool = false,
         onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
         onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
     ) {
@@ -107,6 +117,7 @@ public struct TimelineView: View {
         self.laneHeight = laneHeight
         self.laneSpacing = laneSpacing
         self.showAudioLanes = showAudioLanes
+        self.showLaneLabels = showLaneLabels
         self.onReorder = onReorder
         self.onTrim = onTrim
     }
@@ -194,6 +205,30 @@ public struct TimelineView: View {
                 let item = lane.1[i]
                 laneItemBlock(item: item, pxPerSecond: pxPerSecond)
             }
+            if showLaneLabels, let label = TimelineView.laneLabel(for: lane.0) {
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+                    .padding(.top, 2)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    /// Pure: derives a short display label for a lane kind. Returns `nil` for the
+    /// implicit chain (the chain has no label since it's the timeline's spine).
+    /// Internal so label semantics are unit-testable without driving SwiftUI.
+    nonisolated internal static func laneLabel(for kind: LaneKind) -> String? {
+        switch kind {
+        case .implicitChain:
+            return nil
+        case .track(let index, _, let label):
+            return label ?? "Track \(index + 1)"
+        case .freeFloaters(let pack):
+            return pack == 0 ? "Floaters" : "Floaters \(pack + 1)"
+        case .audio(let index, let label):
+            return label ?? "Audio \(index + 1)"
         }
     }
 
