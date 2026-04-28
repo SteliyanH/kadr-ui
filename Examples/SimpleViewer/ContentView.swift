@@ -212,7 +212,7 @@ struct SimpleViewerView: View {
         return clip
     }
 
-    private static func symbol(_ name: String, size: CGFloat, tint: PlatformColor) -> PlatformImage {
+    fileprivate static func symbol(_ name: String, size: CGFloat, tint: PlatformColor) -> PlatformImage {
         #if canImport(UIKit)
         let config = UIImage.SymbolConfiguration(pointSize: size, weight: .regular)
         let img = UIImage(systemName: name, withConfiguration: config)?
@@ -230,6 +230,80 @@ struct SimpleViewerView: View {
 
 #Preview {
     SimpleViewerView()
+}
+
+// MARK: - Multi-track demo (v0.5+)
+
+/// Demonstrates `TimelineView`'s multi-lane render against a Kadr 0.6 multi-track
+/// composition: a main chain plus a pinned `.at(time:)` clip plus a `Track {}` block,
+/// with `showLaneLabels` enabled so each row has a small caption.
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+struct MultiTrackViewerView: View {
+    @State private var selectedClipID: ClipID?
+    @State private var playheadTime: CMTime = .zero
+
+    private var video: Video {
+        let blue   = SimpleViewerView.symbol("photo.fill",     size: 400, tint: .systemBlue)
+        let purple = SimpleViewerView.symbol("rectangle.fill", size: 400, tint: .systemPurple)
+        let green  = SimpleViewerView.symbol("circle.fill",    size: 400, tint: .systemGreen)
+        let red    = SimpleViewerView.symbol("triangle.fill",  size: 400, tint: .systemRed)
+        return Video {
+            // Main chain — 8s.
+            ImageClip(blue,   duration: 4.0).id("main-a")
+            ImageClip(purple, duration: 4.0).id("main-b")
+
+            // A free-floater pinned at t=1s.
+            ImageClip(red, duration: 2.0).at(time: 1.0).id("pip")
+
+            // A grouped sub-timeline starting at t=3s.
+            Track(at: 3.0) {
+                ImageClip(green, duration: 2.0).id("track-a")
+                ImageClip(red,   duration: 2.0).id("track-b")
+            }
+        }
+        .preset(.reelsAndShorts)
+        .audio(url: URL(fileURLWithPath: "/tmp/demo.m4a"))
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 4) {
+                Text("Multi-Track Demo (v0.5)").font(.title2.bold())
+                Text("Lane stack: chain → Track → free-floater → audio. Tap any block to select.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            VideoPreview(video)
+                .aspectRatio(9.0 / 16.0, contentMode: .fit)
+                .background(.black)
+                .clipShape(.rect(cornerRadius: 12))
+
+            TimelineView(
+                video,
+                currentTime: $playheadTime,
+                selectedClipID: $selectedClipID,
+                laneHeight: 36,
+                laneSpacing: 4,
+                showLaneLabels: true
+            )
+            .frame(height: 200)
+            .padding(8)
+            .background(.gray.opacity(0.15), in: .rect(cornerRadius: 8))
+
+            HStack {
+                Text("Selected clip:")
+                Text(selectedClipID?.rawValue ?? "—")
+                    .foregroundStyle(.secondary).monospaced()
+            }
+        }
+        .padding()
+    }
+}
+
+#Preview("Multi-Track") {
+    MultiTrackViewerView()
 }
 
 #endif
