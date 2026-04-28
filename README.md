@@ -72,6 +72,7 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.4.3 | ≥ 0.4.1 |
 | 0.4.4 | ≥ 0.5.0 *(uses `Overlay.visibilityRange`)* |
 | 0.5.0 | ≥ 0.6.0 *(uses `Track`, `Clip.startTime`)* |
+| 0.5.1 | ≥ 0.6.0 |
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 

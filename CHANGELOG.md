@@ -4,6 +4,24 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-04-28
+
+Closes the v0.5.0 deferral on edit gestures in multi-track compositions. `TimelineView`'s reorder + trim now apply to the implicit chain lane in **both** chain-only and multi-track render paths — dragging a chain clip leaves Tracks and free-floaters in their original `video.clips` positions.
+
+### Added
+
+- `TimelineView.chainIndices(in:)` and `TimelineView.applyChainReorder(clips:from:to:)` — `nonisolated` static helpers that reorder only chain items, preserving Tracks and free-floaters at their original full-array positions.
+- Multi-lane render now uses an editable HStack for the chain lane (lane 0). Reorder + trim work the same as v0.4.x — drag a chain clip, drop it, the consumer rebuilds the `Video` from the callback's `newClips`. Other lanes (Tracks, free-floaters, audio) remain read-only as in v0.5.0.
+
+### Changed
+
+- Reorder math (`computeTargetIndex`, `clipReorderOffset`, `reorderAnimationKey`, `handleReorder`) now operates in chain-position space internally and translates to/from original-array indices at the gesture-handler boundary. Chain-only mode is identical to v0.5.0 (chainIndices == video.clips.indices); multi-track gains correct chain-aware behavior.
+- All `internal static` helpers in `TimelineView` are now explicitly `nonisolated`. Required so the new chain-aware code paths can call them from `nonisolated` contexts; same `View`-MainActor inheritance gotcha that bit Tier 1.
+
+### Tests
+
+- 7 new (5 `chainIndices` / `applyChainReorder` cases + 1 multi-track edit-callbacks smoke + 1 transition-travels-with-source case). Suite: 95 → 102.
+
 ## [0.5.0] - 2026-04-28
 
 Multi-lane `TimelineView` for Kadr 0.6 multi-track compositions. Built across four tiered PRs per the [DESIGN.md](DESIGN.md#v05--multi-lane-timeline) RFC. Pure additive — every v0.4.x chain-only call site continues to compile and renders pixel-identical to v0.4.x.

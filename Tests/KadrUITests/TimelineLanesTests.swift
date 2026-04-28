@@ -262,6 +262,103 @@ struct TimelineLanesTests {
         #expect(TimelineView.laneLabel(for: .audio(index: 0, label: "music.mp3")) == "music.mp3")
     }
 
+    // MARK: - chainIndices (v0.5.1)
+
+    @Test func chainIndicesForChainOnlyReturnsAllIndices() {
+        let img = PlatformImage()
+        let clips: [any Clip] = [
+            ImageClip(img, duration: 1.0),
+            Kadr.Transition.fade(duration: 0.3),
+            ImageClip(img, duration: 2.0),
+        ]
+        #expect(TimelineView.chainIndices(in: clips) == [0, 1, 2])
+    }
+
+    @Test func chainIndicesSkipsTracksAndFloaters() {
+        let img = PlatformImage()
+        let clips: [any Clip] = [
+            ImageClip(img, duration: 1.0),                       // 0 — chain
+            Track(at: 0.5) { ImageClip(img, duration: 1.0) },    // 1 — Track
+            ImageClip(img, duration: 2.0),                       // 2 — chain
+            ImageClip(img, duration: 1.0).at(time: 3.0),         // 3 — floater
+            ImageClip(img, duration: 1.0),                       // 4 — chain
+        ]
+        #expect(TimelineView.chainIndices(in: clips) == [0, 2, 4])
+    }
+
+    // MARK: - applyChainReorder (v0.5.1)
+
+    @Test func applyChainReorderInChainOnlyMatchesPlainReorder() {
+        let img = PlatformImage()
+        let clips: [any Clip] = [
+            ImageClip(img, duration: 1.0).id("a"),
+            ImageClip(img, duration: 2.0).id("b"),
+            ImageClip(img, duration: 3.0).id("c"),
+        ]
+        // Move "a" → end (chain position 0 → 2). Equivalent to plain applyReorder.
+        let chainResult = TimelineView.applyChainReorder(clips: clips, from: 0, to: 2)
+        let plainResult = TimelineView.applyReorder(clips: clips, from: 0, to: 2)
+        #expect(chainResult?.newClips.count == plainResult?.newClips.count)
+        #expect(chainResult?.newClips[0].clipID == ClipID("b"))
+        #expect(chainResult?.newClips[1].clipID == ClipID("c"))
+        #expect(chainResult?.newClips[2].clipID == ClipID("a"))
+    }
+
+    @Test func applyChainReorderPreservesTracksAndFloaters() {
+        let img = PlatformImage()
+        let clips: [any Clip] = [
+            ImageClip(img, duration: 1.0).id("a"),                                    // 0 — chain pos 0
+            Track(at: 0.5) { ImageClip(img, duration: 1.0).id("ta") },                // 1 — Track stays at idx 1
+            ImageClip(img, duration: 2.0).id("b"),                                    // 2 — chain pos 1
+            ImageClip(img, duration: 1.0).at(time: 4.0).id("pip"),                    // 3 — floater stays at idx 3
+            ImageClip(img, duration: 3.0).id("c"),                                    // 4 — chain pos 2
+        ]
+        // Reorder chain: move "a" (pos 0) to end (pos 2). New chain order: b, c, a.
+        let result = TimelineView.applyChainReorder(clips: clips, from: 0, to: 2)
+        #expect(result != nil)
+        let merged = result!.newClips
+        // Non-chain items retain their original positions.
+        #expect(merged[1] is Track)
+        #expect(merged[3].clipID == ClipID("pip"))
+        // Chain slots filled with the reordered items in declaration order.
+        #expect(merged[0].clipID == ClipID("b"))
+        #expect(merged[2].clipID == ClipID("c"))
+        #expect(merged[4].clipID == ClipID("a"))
+    }
+
+    @Test func applyChainReorderNoOpReturnsNil() {
+        let img = PlatformImage()
+        let clips: [any Clip] = [
+            ImageClip(img, duration: 1.0).id("a"),
+            ImageClip(img, duration: 2.0).id("b"),
+        ]
+        // Drop "a" on its own slot — no-op.
+        let result = TimelineView.applyChainReorder(clips: clips, from: 0, to: 0)
+        #expect(result == nil)
+    }
+
+    @Test func applyChainReorderTransitionTravelsWithSource() {
+        let img = PlatformImage()
+        let clips: [any Clip] = [
+            ImageClip(img, duration: 1.0).id("a"),
+            Kadr.Transition.fade(duration: 0.3),
+            ImageClip(img, duration: 2.0).id("b"),
+            Track(at: 5.0) { ImageClip(img, duration: 1.0) },                         // non-chain — stays at idx 3
+            ImageClip(img, duration: 3.0).id("c"),
+        ]
+        // Chain order: a, fade, b, c. Move "a" group (pos 0, with its trailing
+        // transition) to chain-pos 2 (after "b"). New chain order: b, a, fade, c.
+        let result = TimelineView.applyChainReorder(clips: clips, from: 0, to: 2)
+        #expect(result != nil)
+        let merged = result!.newClips
+        #expect(merged[3] is Track)  // non-chain preserved at original index
+        // Chain slots: idx 0 = b, idx 1 = a, idx 2 = fade, idx 4 = c
+        #expect(merged[0].clipID == ClipID("b"))
+        #expect(merged[1].clipID == ClipID("a"))
+        #expect(merged[2] is Kadr.Transition)
+        #expect(merged[4].clipID == ClipID("c"))
+    }
+
     // MARK: - End-to-end multi-track integration
 
     @Test func endToEndMultiTrackVideoMatchesExpectation() {

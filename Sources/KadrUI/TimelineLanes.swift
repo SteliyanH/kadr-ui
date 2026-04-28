@@ -113,6 +113,50 @@ extension TimelineView {
     /// rows. Sort by start time, place each on the first row whose last item ends
     /// at or before this floater's start; else open a new row. Stable for floaters
     /// with identical start times (declaration order is preserved within a row).
+    /// Pure: original-array indices of clips that participate in the implicit chain.
+    /// Excludes Tracks and clips with a non-`nil` `startTime`. Returned in declaration
+    /// order. In a chain-only `Video`, returns every index in `video.clips`.
+    nonisolated static func chainIndices(in clips: [any Clip]) -> [Int] {
+        var out: [Int] = []
+        for i in clips.indices {
+            let clip = clips[i]
+            if clip is Track { continue }
+            if clip.startTime != nil { continue }
+            out.append(i)
+        }
+        return out
+    }
+
+    /// Pure: reorder only the implicit-chain clips, preserving the original positions
+    /// of Tracks and free-floaters in the full array. `from` and `to` are positions
+    /// **within the chain** (0-based among chain items). Returns the new full-array
+    /// `clips` plus the new chain-position the source landed at — `nil` for no-op
+    /// moves (drop-on-self group).
+    nonisolated static func applyChainReorder(
+        clips: [any Clip],
+        from chainSource: Int,
+        to chainTarget: Int
+    ) -> (newClips: [any Clip], chainTargetIndex: Int)? {
+        let indices = chainIndices(in: clips)
+        guard indices.indices.contains(chainSource) else { return nil }
+
+        // Extract chain in declaration order, run the existing chain-aware reorder,
+        // then merge the new chain back into the full clips array at the same slots.
+        let chain = indices.map { clips[$0] }
+        guard let result = applyReorder(clips: chain, from: chainSource, to: chainTarget) else {
+            return nil
+        }
+        var merged = clips
+        for (chainPos, originalIdx) in indices.enumerated() {
+            // Bounds-safe — the chain length is unchanged by applyReorder (transitions
+            // travel with their preceding media clip; total count stays equal).
+            if chainPos < result.newClips.count {
+                merged[originalIdx] = result.newClips[chainPos]
+            }
+        }
+        return (merged, result.targetIndex)
+    }
+
     nonisolated static func packFreeFloaters(_ floaters: [LaneItem]) -> [[LaneItem]] {
         let sorted = floaters.sorted { a, b in
             CMTimeCompare(a.startTime, b.startTime) < 0

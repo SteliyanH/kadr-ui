@@ -55,6 +55,25 @@ struct TimelineViewTests {
         _ = TimelineView(v, showAudioLanes: false).body
     }
 
+    @Test @MainActor func constructsMultiTrackWithReorderAndTrim() {
+        // v0.5.1 — reorder + trim callbacks are now wired into the multi-lane render's
+        // chain lane. Smoke test only; chain-aware reorder math is unit-tested in
+        // TimelineLanesTests.applyChainReorder*.
+        let img = PlatformImage()
+        let v = Video {
+            ImageClip(img, duration: 5.0).id("a")
+            Kadr.Transition.fade(duration: 0.3)
+            ImageClip(img, duration: 5.0).id("b")
+            Track(at: 1.0) { ImageClip(img, duration: 2.0).id("ta") }
+            ImageClip(img, duration: 2.0).at(time: 2.0).id("pip")
+        }
+        _ = TimelineView(
+            v,
+            onReorder: { _, _, _ in },
+            onTrim: { _, _, _ in }
+        ).body
+    }
+
     @Test @MainActor func constructsForMultiTrackVideo() {
         // Video with .at(time:) and a Track {} block — exercises the multi-lane code path.
         let img = PlatformImage()
