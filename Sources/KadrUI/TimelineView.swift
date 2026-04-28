@@ -47,6 +47,7 @@ public struct TimelineView: View {
     private let laneHeight: CGFloat
     private let laneSpacing: CGFloat
     private let showAudioLanes: Bool
+    private let showAudioWaveforms: Bool
     private let showLaneLabels: Bool
     private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
     private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
@@ -67,6 +68,14 @@ public struct TimelineView: View {
     /// Current pixel delta of the in-flight trim drag. Drives the live width/offset
     /// preview on the dragged clip; applied to the callback in seconds on release.
     @State private var trimPixelDelta: CGFloat = 0
+
+    /// Cached waveforms keyed by audio asset URL. Populated lazily when
+    /// `showAudioWaveforms` is enabled. Survives clip-state changes; cleared only
+    /// when the host view re-mounts. Added in v0.5.3.
+    @State private var audioWaveforms: [URL: AudioWaveform] = [:]
+    /// URLs whose load has already been scheduled. Prevents the re-load loop when
+    /// `Video.audioTracks` is recomputed by the parent on every body invalidation.
+    @State private var waveformLoadScheduled: Set<URL> = []
 
     internal enum TrimEdge { case leading, trailing }
 
@@ -108,6 +117,7 @@ public struct TimelineView: View {
         laneHeight: CGFloat = 40,
         laneSpacing: CGFloat = 4,
         showAudioLanes: Bool = true,
+        showAudioWaveforms: Bool = false,
         showLaneLabels: Bool = false,
         onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
         onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
@@ -118,6 +128,7 @@ public struct TimelineView: View {
         self.laneHeight = laneHeight
         self.laneSpacing = laneSpacing
         self.showAudioLanes = showAudioLanes
+        self.showAudioWaveforms = showAudioWaveforms
         self.showLaneLabels = showLaneLabels
         self.onReorder = onReorder
         self.onTrim = onTrim
@@ -158,6 +169,33 @@ public struct TimelineView: View {
         }
         .task {
             await resolveDurations()
+        }
+        .task(id: waveformLoadKey) {
+            await loadWaveformsIfNeeded()
+        }
+    }
+
+    /// Identity for `.task(id:)` driving waveform loading — re-fires when the audio
+    /// track list shape changes, but not on every body re-eval.
+    private var waveformLoadKey: WaveformLoadKey {
+        WaveformLoadKey(enabled: showAudioWaveforms, urls: video.audioTracks.map(\.url))
+    }
+
+    private struct WaveformLoadKey: Hashable {
+        let enabled: Bool
+        let urls: [URL]
+    }
+
+    private func loadWaveformsIfNeeded() async {
+        guard showAudioWaveforms else { return }
+        for audio in video.audioTracks {
+            let url = audio.url
+            if waveformLoadScheduled.contains(url) { continue }
+            waveformLoadScheduled.insert(url)
+            // Render at a generous resolution; the lane block decimates further if
+            // it's narrower than the peak count.
+            let waveform = (try? await AudioWaveformLoader.load(url: url, sampleCount: 240)) ?? .empty
+            audioWaveforms[url] = waveform
         }
     }
 
@@ -219,6 +257,15 @@ public struct TimelineView: View {
         totalSeconds: Double
     ) -> some View {
         let totalWidth = max(0, totalSeconds * pxPerSecond)
+        // For audio lanes, look up the source URL via the lane's index so we can
+        // overlay the cached waveform when available.
+        let audioURL: URL? = {
+            if case let .audio(index, _) = lane.0,
+               video.audioTracks.indices.contains(index) {
+                return video.audioTracks[index].url
+            }
+            return nil
+        }()
         ZStack(alignment: .topLeading) {
             // Lane background — subtle, distinguishes adjacent lanes.
             RoundedRectangle(cornerRadius: 2)
@@ -226,7 +273,11 @@ public struct TimelineView: View {
                 .frame(width: totalWidth, height: laneHeight)
             ForEach(lane.1.indices, id: \.self) { i in
                 let item = lane.1[i]
-                laneItemBlock(item: item, pxPerSecond: pxPerSecond)
+                let waveform: AudioWaveform? = {
+                    guard showAudioWaveforms, item.kind == .audio, let url = audioURL else { return nil }
+                    return audioWaveforms[url]
+                }()
+                laneItemBlock(item: item, pxPerSecond: pxPerSecond, waveform: waveform)
             }
             if showLaneLabels, let label = TimelineView.laneLabel(for: lane.0) {
                 Text(label)
@@ -256,18 +307,28 @@ public struct TimelineView: View {
     }
 
     @ViewBuilder
-    private func laneItemBlock(item: LaneItem, pxPerSecond: Double) -> some View {
+    private func laneItemBlock(item: LaneItem, pxPerSecond: Double, waveform: AudioWaveform? = nil) -> some View {
         let x = max(0, CMTimeGetSeconds(item.startTime) * pxPerSecond)
         let w = max(0, CMTimeGetSeconds(item.duration) * pxPerSecond)
         let isSelected = selectedClipID != nil && item.clipID != nil && selectedClipID?.wrappedValue == item.clipID
-        let view = RoundedRectangle(cornerRadius: 4)
+        let block = RoundedRectangle(cornerRadius: 4)
             .fill(laneItemColor(item.kind))
             .frame(width: w, height: laneHeight)
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
-            )
-            .offset(x: x)
+
+        let view = ZStack {
+            block
+            if let waveform, !waveform.peaks.isEmpty {
+                AudioWaveformShape(peaks: waveform.peaks)
+                    .fill(Color.white.opacity(0.7))
+                    .frame(width: w, height: laneHeight)
+                    .allowsHitTesting(false)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
+        )
+        .offset(x: x)
 
         if let id = item.clipID, let binding = selectedClipID {
             view.onTapGesture { binding.wrappedValue = id }

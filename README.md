@@ -74,6 +74,7 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.5.0 | ≥ 0.6.0 *(uses `Track`, `Clip.startTime`)* |
 | 0.5.1 | ≥ 0.6.0 |
 | 0.5.2 | ≥ 0.7.0 *(uses `Track.name`, `AudioTrack.startTime`, `AudioTrack.explicitDuration`)* |
+| 0.5.3 | ≥ 0.7.0 |
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 

@@ -4,6 +4,26 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-04-28
+
+Audio waveforms in `TimelineView`. Closes the v0.5.x deferred item from the multi-lane RFC. Pure additive — every v0.5.2 call site renders identically; waveforms only appear when callers opt in via `showAudioWaveforms: true`.
+
+### Added
+
+- **`AudioWaveform`** value type — a fixed-length array of normalized peak values suitable for rendering as bars or a polyline. `Sendable` + `Equatable`.
+- **`AudioWaveformLoader.load(url:sampleCount:)`** — async loader that reads PCM samples via `AVAssetReader`, downmixes multi-channel sources to mono, bucket-peaks into the target sample count, and normalizes so the max peak is `1.0`. Defensive on unreadable assets / asset-with-no-audio (returns `.empty`).
+- **`TimelineView(showAudioWaveforms:)`** — new init param (default `false`). When true, audio lane blocks render a symmetric vertical-bar waveform centered on the block's midline. Loader runs once per audio URL via an internal `@State` cache; survives clip-state changes, reloads only when the audio-track URL list changes.
+- Internal `AudioWaveformShape` SwiftUI `Shape` for the bar render. Bucket-decimates the peak array down to the rect's pixel-column count so visuals stay crisp regardless of lane width.
+
+### Tests
+
+- 9 new tests covering the bucketing math (empty input, zero-bucket-count, padding, abs-magnitude, non-divisible-counts, all-zero normalization, scale-to-one, shape preservation, value-type equality) plus 1 smoke test for `TimelineView(showAudioWaveforms: true)`. Suite: 108 → 119.
+
+### Notes
+
+- Waveform loading is async and can take several hundred ms on long assets. The `.task(id:)` driving the load fires once per audio-URL set change, not per body re-eval.
+- Custom waveform colors / shapes are not exposed in v0.5.3 — `TimelineView` uses a fixed white-on-block fill. A future minor version may expose styling if there's demand.
+
 ## [0.5.2] - 2026-04-28
 
 Catch-up to Kadr 0.7. `TimelineView` now consumes `Track.name` for real lane labels and honors `AudioTrack.at(time:)` / `.duration(_:)` for time-aware audio lanes. Pure additive; every v0.5.1 call site renders identically to before — only previously-unreachable surface (named Tracks, time-pinned audio) changes.

@@ -36,6 +36,15 @@ struct TimelineViewTests {
         _ = TimelineView(sampleVideo(), showAudioLanes: false).body
     }
 
+    @Test @MainActor func constructsWithAudioWaveformsEnabled() {
+        let img = PlatformImage()
+        let v = Video {
+            ImageClip(img, duration: 5.0)
+        }
+        .audio(url: URL(fileURLWithPath: "/tmp/m.m4a"))
+        _ = TimelineView(v, showAudioWaveforms: true).body
+    }
+
     @Test @MainActor func constructsWithLaneLabelsShown() {
         let img = PlatformImage()
         let v = Video {
