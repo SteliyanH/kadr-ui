@@ -28,6 +28,37 @@ struct TimelineViewTests {
         _ = TimelineView(sampleVideo(), currentTime: $t).body
     }
 
+    @Test @MainActor func constructsWithLaneSizingParams() {
+        _ = TimelineView(sampleVideo(), laneHeight: 80, laneSpacing: 8).body
+    }
+
+    @Test @MainActor func constructsForMultiTrackVideo() {
+        // Video with .at(time:) and a Track {} block — exercises the multi-lane code path.
+        let img = PlatformImage()
+        let v = Video {
+            ImageClip(img, duration: 10.0).id("main")
+            ImageClip(img, duration: 2.0).at(time: 1.0).id("pip")
+            Track(at: 4.0) {
+                ImageClip(img, duration: 2.0).id("ta")
+                ImageClip(img, duration: 2.0).id("tb")
+            }
+        }
+        _ = TimelineView(v).body
+    }
+
+    @Test func chainOnlyVideoTakesSingleLanePath() {
+        // Visual regression sentinel — assignLanes returns exactly one lane for a
+        // chain-only Video, which is what the body checks to keep v0.4.x behavior.
+        let img = PlatformImage()
+        let v = Video {
+            ImageClip(img, duration: 1.0)
+            Kadr.Transition.fade(duration: 0.3)
+            ImageClip(img, duration: 2.0)
+        }
+        let lanes = TimelineView.assignLanes(for: v, includeAudio: false)
+        #expect(lanes.count == 1)
+    }
+
     @Test @MainActor func constructsForVideoWithoutAudioTracks() {
         let img = PlatformImage()
         let video = Video {
