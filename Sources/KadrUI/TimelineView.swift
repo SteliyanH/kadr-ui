@@ -34,9 +34,10 @@ import Kadr
 /// (``Kadr/Track`` blocks or clips pinned with `.at(time:)`), the timeline switches to
 /// a stacked-lane render: lane 0 is the implicit chain, then one lane per `Track` in
 /// declaration order, then greedy-packed rows of free-floaters, then optional audio
-/// lanes. Chain-only compositions render unchanged from v0.4.x. Edit gestures
-/// (reorder/trim) apply only on the chain-only path in v0.5.0; lane-0 editing in
-/// multi-track compositions is staged into a v0.5.x follow-up.
+/// lanes. Chain-only compositions render unchanged from v0.4.x. Edit gestures (reorder
+/// and trim) apply on the implicit-chain lane in both modes — reorder is chain-aware,
+/// so dragging a chain clip never disturbs Track or free-floater positions in the full
+/// `video.clips` array (added in v0.5.1). Other lanes remain read-only.
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct TimelineView: View {
 
@@ -179,12 +180,34 @@ public struct TimelineView: View {
                     .frame(height: 14)
             }
             ForEach(lanes.indices, id: \.self) { i in
-                laneRow(
-                    lane: lanes[i],
-                    pxPerSecond: pxPerSecond,
-                    totalSeconds: totalSeconds
-                )
+                Group {
+                    if case .implicitChain = lanes[i].0 {
+                        // Lane 0 — full editable chain HStack. Reorder/trim gestures
+                        // work just like in v0.4.x; the underlying math is chain-aware
+                        // so Tracks and free-floaters stay put when the user reorders.
+                        editableChainLane(pxPerSecond: pxPerSecond)
+                    } else {
+                        laneRow(
+                            lane: lanes[i],
+                            pxPerSecond: pxPerSecond,
+                            totalSeconds: totalSeconds
+                        )
+                    }
+                }
                 .frame(height: laneHeight)
+            }
+        }
+    }
+
+    /// Editable chain lane for the multi-track render — same `clipBlock` HStack the
+    /// chain-only path uses, but iterating only chain indices so Tracks and floaters
+    /// don't appear in this row. Reorder/trim gestures route through the chain-aware
+    /// helpers (``applyChainReorder``).
+    @ViewBuilder
+    private func editableChainLane(pxPerSecond: Double) -> some View {
+        HStack(spacing: 0) {
+            ForEach(chainIndicesArray, id: \.self) { index in
+                clipBlock(at: index, pxPerSecond: pxPerSecond)
             }
         }
     }
@@ -328,7 +351,7 @@ public struct TimelineView: View {
     /// Pure: convert an x-pixel position in the scrub strip to a clamped time in seconds.
     /// Defensive against zero/negative `pxPerSecond` and out-of-range x values.
     /// Internal so scrub math is unit-testable without driving SwiftUI gestures.
-    internal static func scrubTime(x: CGFloat, pxPerSecond: Double, totalSeconds: Double) -> Double {
+    nonisolated internal static func scrubTime(x: CGFloat, pxPerSecond: Double, totalSeconds: Double) -> Double {
         guard pxPerSecond > 0 else { return 0 }
         let raw = Double(x) / pxPerSecond
         return min(max(raw, 0), max(0, totalSeconds))
@@ -403,16 +426,41 @@ public struct TimelineView: View {
 
     // MARK: - Live reorder offsets
 
+    /// Original-array indices of clips that participate in the implicit chain. In
+    /// chain-only compositions, this equals every index in `video.clips`. In multi-
+    /// track compositions, it skips Tracks and free-floaters so reorder/trim math
+    /// operates on chain items only.
+    private var chainIndicesArray: [Int] {
+        TimelineView.chainIndices(in: Array(video.clips))
+    }
+
+    /// Slot widths in chain order. Used as `slotWidths` for `computeTargetIndex` /
+    /// `reorderShiftOffset`. Source/target indices passed to those helpers must be
+    /// **chain-positions**, not original-array indices.
+    private func chainSlotWidths(pxPerSecond: Double) -> [CGFloat] {
+        chainIndicesArray.map {
+            CGFloat(CMTimeGetSeconds(durationForClip(at: $0))) * pxPerSecond
+        }
+    }
+
     /// True if `index` is the source media clip OR its trailing transition during an
     /// in-flight reorder drag. Both travel together visually.
     private func isPartOfSourceGroup(_ index: Int) -> Bool {
         guard let src = draggingIndex else { return false }
+        let chain = chainIndicesArray
+        guard let srcPos = chain.firstIndex(of: src),
+              let idxPos = chain.firstIndex(of: index) else { return false }
         let groupSize = sourceGroupSize(for: src)
-        return index >= src && index < src + groupSize
+        return idxPos >= srcPos && idxPos < srcPos + groupSize
     }
 
+    /// Group size in chain-position units — 2 if the next chain item is a Transition
+    /// (which travels with the source), else 1.
     private func sourceGroupSize(for src: Int) -> Int {
-        (src + 1 < video.clips.count && video.clips[src + 1] is Kadr.Transition) ? 2 : 1
+        let chain = chainIndicesArray
+        guard let srcPos = chain.firstIndex(of: src),
+              srcPos + 1 < chain.count else { return 1 }
+        return video.clips[chain[srcPos + 1]] is Kadr.Transition ? 2 : 1
     }
 
     /// Horizontal offset to apply to clip `index` for live reorder feedback. The source
@@ -420,21 +468,22 @@ public struct TimelineView: View {
     /// right by the source-group width to visually open the drop slot.
     private func clipReorderOffset(for index: Int, pxPerSecond: Double) -> CGFloat {
         guard let src = draggingIndex else { return 0 }
+        let chain = chainIndicesArray
+        guard let srcPos = chain.firstIndex(of: src),
+              let idxPos = chain.firstIndex(of: index) else { return 0 }
         let groupSize = sourceGroupSize(for: src)
-        if index >= src && index < src + groupSize {
+        if idxPos >= srcPos && idxPos < srcPos + groupSize {
             return dragOffset   // source group rides the finger
         }
-        let widths: [CGFloat] = video.clips.indices.map {
-            CGFloat(CMTimeGetSeconds(durationForClip(at: $0))) * pxPerSecond
-        }
-        let target = TimelineView.computeTargetIndex(
-            source: src, dragX: dragOffset, slotWidths: widths
+        let widths = chainSlotWidths(pxPerSecond: pxPerSecond)
+        let targetPos = TimelineView.computeTargetIndex(
+            source: srcPos, dragX: dragOffset, slotWidths: widths
         )
         return TimelineView.reorderShiftOffset(
-            index: index,
-            source: src,
+            index: idxPos,
+            source: srcPos,
             groupSize: groupSize,
-            target: target,
+            target: targetPos,
             slotWidths: widths
         )
     }
@@ -443,10 +492,10 @@ public struct TimelineView: View {
     /// state changes that should animate (a slot crossing), not on every drag pixel.
     private func reorderAnimationKey(for index: Int, pxPerSecond: Double) -> Int {
         guard let src = draggingIndex, src != index else { return 0 }
-        let widths: [CGFloat] = video.clips.indices.map {
-            CGFloat(CMTimeGetSeconds(durationForClip(at: $0))) * pxPerSecond
-        }
-        return TimelineView.computeTargetIndex(source: src, dragX: dragOffset, slotWidths: widths)
+        let chain = chainIndicesArray
+        guard let srcPos = chain.firstIndex(of: src) else { return 0 }
+        let widths = chainSlotWidths(pxPerSecond: pxPerSecond)
+        return TimelineView.computeTargetIndex(source: srcPos, dragX: dragOffset, slotWidths: widths)
     }
 
     /// Pure: per-index horizontal shift offset for live reorder feedback. The source
@@ -458,7 +507,7 @@ public struct TimelineView: View {
     ///   the target, otherwise `0`.
     ///
     /// Internal so the rule is unit-testable without driving SwiftUI gestures.
-    internal static func reorderShiftOffset(
+    nonisolated internal static func reorderShiftOffset(
         index: Int,
         source: Int,
         groupSize: Int,
@@ -501,7 +550,7 @@ public struct TimelineView: View {
     ///   by `Δ` so the visual right edge stays anchored at its slot's right edge.
     /// - Trailing edge drag → width changes by `Δ` (positive = wider, negative = narrower),
     ///   no leading-edge offset.
-    internal static func liveTrimMetrics(
+    nonisolated internal static func liveTrimMetrics(
         edge: TrimEdge,
         baseWidth: CGFloat,
         pixelDelta: CGFloat
@@ -580,20 +629,39 @@ public struct TimelineView: View {
 
     // MARK: - Reorder math
 
+    /// Resolve a drop slot for a reorder drag. `source` is the **original-array** index
+    /// of the dragged chain item; `dragX` is the cumulative horizontal pixel translation.
+    /// Returns the **original-array** index of the slot the drop lands on.
     private func computeTargetIndex(source: Int, dragX: CGFloat, pxPerSecond: Double) -> Int {
-        let widths: [CGFloat] = video.clips.indices.map {
-            CGFloat(CMTimeGetSeconds(durationForClip(at: $0))) * pxPerSecond
-        }
-        return TimelineView.computeTargetIndex(source: source, dragX: dragX, slotWidths: widths)
+        let chain = chainIndicesArray
+        guard let srcPos = chain.firstIndex(of: source) else { return source }
+        let widths = chainSlotWidths(pxPerSecond: pxPerSecond)
+        let targetPos = TimelineView.computeTargetIndex(
+            source: srcPos, dragX: dragX, slotWidths: widths
+        )
+        // Translate the chain-position back to an original-array index.
+        guard chain.indices.contains(targetPos) else { return source }
+        return chain[targetPos]
     }
 
+    /// Apply a reorder gesture. Operates on chain-only indices and uses
+    /// `applyChainReorder` to keep Tracks and free-floaters in their original slots.
     private func handleReorder(from sourceIndex: Int, to rawTarget: Int) {
-        guard let result = TimelineView.applyReorder(
+        let chain = chainIndicesArray
+        guard let srcPos = chain.firstIndex(of: sourceIndex),
+              let targetPos = chain.firstIndex(of: rawTarget) else { return }
+        guard let result = TimelineView.applyChainReorder(
             clips: Array(video.clips),
-            from: sourceIndex,
-            to: rawTarget
+            from: srcPos,
+            to: targetPos
         ) else { return }
-        onReorder?(sourceIndex, result.targetIndex, result.newClips)
+        // Translate the new chain-position the source landed at back to an
+        // original-array index for the consumer's callback.
+        let newChain = TimelineView.chainIndices(in: result.newClips)
+        let newSourceOriginalIdx = newChain.indices.contains(result.chainTargetIndex)
+            ? newChain[result.chainTargetIndex]
+            : sourceIndex
+        onReorder?(sourceIndex, newSourceOriginalIdx, result.newClips)
     }
 
     /// Pure: which slot does the dragged clip's center lie over after `dragX` pixels of
@@ -602,7 +670,7 @@ public struct TimelineView: View {
     ///
     /// Internal so `TimelineView`'s reorder math can be unit-tested without driving
     /// SwiftUI gestures.
-    internal static func computeTargetIndex(
+    nonisolated internal static func computeTargetIndex(
         source: Int,
         dragX: CGFloat,
         slotWidths widths: [CGFloat]
@@ -641,7 +709,7 @@ public struct TimelineView: View {
     /// The non-dragged edge's delta is always `.zero`.
     ///
     /// Internal so trim math is unit-testable without driving SwiftUI gestures.
-    internal static func computeTrimDeltas(
+    nonisolated internal static func computeTrimDeltas(
         edge: TrimEdge,
         pixelDelta: CGFloat,
         pxPerSecond: Double
@@ -666,7 +734,7 @@ public struct TimelineView: View {
     ///
     /// Internal so `TimelineView`'s reorder math can be unit-tested without driving
     /// SwiftUI gestures.
-    internal static func applyReorder(
+    nonisolated internal static func applyReorder(
         clips: [any Clip],
         from sourceIndex: Int,
         to rawTarget: Int
