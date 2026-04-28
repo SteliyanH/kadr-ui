@@ -32,6 +32,20 @@ struct TimelineViewTests {
         _ = TimelineView(sampleVideo(), laneHeight: 80, laneSpacing: 8).body
     }
 
+    @Test @MainActor func constructsWithAudioLanesHidden() {
+        _ = TimelineView(sampleVideo(), showAudioLanes: false).body
+    }
+
+    @Test @MainActor func constructsMultiTrackWithAudioLanesHidden() {
+        let img = PlatformImage()
+        let v = Video {
+            ImageClip(img, duration: 10.0).id("main")
+            Track(at: 1.0) { ImageClip(img, duration: 2.0).id("ta") }
+        }
+        .audio(url: URL(fileURLWithPath: "/tmp/m.m4a"))
+        _ = TimelineView(v, showAudioLanes: false).body
+    }
+
     @Test @MainActor func constructsForMultiTrackVideo() {
         // Video with .at(time:) and a Track {} block — exercises the multi-lane code path.
         let img = PlatformImage()
