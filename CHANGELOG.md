@@ -4,6 +4,23 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-04-28
+
+Catch-up to Kadr 0.7. `TimelineView` now consumes `Track.name` for real lane labels and honors `AudioTrack.at(time:)` / `.duration(_:)` for time-aware audio lanes. Pure additive; every v0.5.1 call site renders identically to before — only previously-unreachable surface (named Tracks, time-pinned audio) changes.
+
+### Changed
+
+- **Track lane label** — `assignLanes` now passes `track.name` through to `LaneKind.track(label:)` instead of always nil. Previously `TimelineView` fell back to "Track 1" / "Track 2" auto-generated labels for every named or unnamed Track. Now named Tracks surface their real label; unnamed ones still get the auto-generated number.
+- **Audio lane timing** — audio lanes now use `audio.startTime ?? .zero` for the lane block's start and `audio.explicitDuration ?? compositionEnd` for its duration (clamped to the composition end). Previously every audio lane spanned the full composition. Audio tracks pinned past the composition end render as zero-duration blocks (matches the engine, which skips them at export).
+
+### Added
+
+- Bumped Kadr dep floor to `0.7.0`.
+
+### Tests
+
+- 6 new tests across `TimelineLanesTests` covering both Track-name shapes (named, unnamed) and four audio-timing shapes (explicit start + duration, capped-to-composition-end, past-end-zero-duration, no-timing default-to-full). Suite: 102 → 108.
+
 ## [0.5.1] - 2026-04-28
 
 Closes the v0.5.0 deferral on edit gestures in multi-track compositions. `TimelineView`'s reorder + trim now apply to the implicit chain lane in **both** chain-only and multi-track render paths — dragging a chain clip leaves Tracks and free-floaters in their original `video.clips` positions.
