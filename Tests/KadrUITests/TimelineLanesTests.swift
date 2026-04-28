@@ -236,6 +236,34 @@ struct TimelineLanesTests {
 
     // MARK: - Integration on a v0.6-shaped Video
 
+    // MARK: - laneLabel
+
+    @Test func implicitChainLaneHasNoLabel() {
+        #expect(TimelineView.laneLabel(for: .implicitChain) == nil)
+    }
+
+    @Test func trackLaneLabelDefaultsToIndexed() {
+        let label = TimelineView.laneLabel(for: .track(index: 0, startTime: cmt(1), label: nil))
+        #expect(label == "Track 1")
+    }
+
+    @Test func trackLaneLabelHonorsExplicit() {
+        let label = TimelineView.laneLabel(for: .track(index: 1, startTime: cmt(1), label: "B-Roll"))
+        #expect(label == "B-Roll")
+    }
+
+    @Test func freeFloaterLaneLabel() {
+        #expect(TimelineView.laneLabel(for: .freeFloaters(packIndex: 0)) == "Floaters")
+        #expect(TimelineView.laneLabel(for: .freeFloaters(packIndex: 2)) == "Floaters 3")
+    }
+
+    @Test func audioLaneLabelDefaultsToIndexedAndHonorsExplicit() {
+        #expect(TimelineView.laneLabel(for: .audio(index: 0, label: nil)) == "Audio 1")
+        #expect(TimelineView.laneLabel(for: .audio(index: 0, label: "music.mp3")) == "music.mp3")
+    }
+
+    // MARK: - End-to-end multi-track integration
+
     @Test func endToEndMultiTrackVideoMatchesExpectation() {
         let musicURL = URL(fileURLWithPath: "/tmp/m.mp3")
         let video = Video {

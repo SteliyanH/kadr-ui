@@ -36,6 +36,15 @@ struct TimelineViewTests {
         _ = TimelineView(sampleVideo(), showAudioLanes: false).body
     }
 
+    @Test @MainActor func constructsWithLaneLabelsShown() {
+        let img = PlatformImage()
+        let v = Video {
+            ImageClip(img, duration: 10.0)
+            Track(at: 1.0) { ImageClip(img, duration: 2.0) }
+        }
+        _ = TimelineView(v, showLaneLabels: true).body
+    }
+
     @Test @MainActor func constructsMultiTrackWithAudioLanesHidden() {
         let img = PlatformImage()
         let v = Video {
