@@ -158,6 +158,92 @@ struct TimelineLanesTests {
         #expect(label == "music.mp3")
     }
 
+    // MARK: - kadr 0.7 surface (v0.5.2)
+
+    @Test func trackNameSurfacesInLaneLabel() {
+        let video = Video {
+            image(10.0, id: "main")
+            Track(at: 1.0, name: "B-Roll") {
+                image(2.0, id: "ta")
+            }
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        guard case let .track(_, _, label) = lanes[1].0 else {
+            Issue.record("expected track lane at index 1")
+            return
+        }
+        #expect(label == "B-Roll")
+    }
+
+    @Test func unnamedTrackProducesNilLabel() {
+        let video = Video {
+            image(10.0, id: "main")
+            Track(at: 1.0) { image(2.0, id: "ta") }
+        }
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+        guard case let .track(_, _, label) = lanes[1].0 else {
+            Issue.record("expected track lane at index 1")
+            return
+        }
+        #expect(label == nil)
+    }
+
+    @Test func audioLaneRespectsExplicitStartAndDuration() {
+        let url = URL(fileURLWithPath: "/tmp/sfx.m4a")
+        let video = Video {
+            image(10.0, id: "main")
+        }
+        .audio { AudioTrack(url: url).at(time: 2.0).duration(1.5) }
+
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: true)
+        let audioLane = try? #require(lanes.last)
+        let item = try? #require(audioLane?.1.first)
+        #expect(CMTimeGetSeconds(item!.startTime) == 2.0)
+        #expect(CMTimeGetSeconds(item!.duration) == 1.5)
+    }
+
+    @Test func audioLaneCapsExplicitDurationToCompositionEnd() {
+        // Composition is 10s, audio pinned to t=8s with .duration(5.0) — only 2s
+        // of the cap is reachable before the composition ends.
+        let url = URL(fileURLWithPath: "/tmp/sfx.m4a")
+        let video = Video {
+            image(10.0, id: "main")
+        }
+        .audio { AudioTrack(url: url).at(time: 8.0).duration(5.0) }
+
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: true)
+        let item = try? #require(lanes.last?.1.first)
+        #expect(CMTimeGetSeconds(item!.startTime) == 8.0)
+        #expect(CMTimeGetSeconds(item!.duration) == 2.0)
+    }
+
+    @Test func audioLaneStartingPastCompositionEndIsZeroDuration() {
+        let url = URL(fileURLWithPath: "/tmp/sfx.m4a")
+        let video = Video {
+            image(5.0, id: "main")
+        }
+        .audio { AudioTrack(url: url).at(time: 10.0) }
+
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: true)
+        let item = try? #require(lanes.last?.1.first)
+        // Engine would skip this track at export; the lane still surfaces it for
+        // introspection consumers, with duration clamped to zero.
+        #expect(CMTimeGetSeconds(item!.duration) == 0)
+    }
+
+    @Test func audioLaneWithoutExplicitTimingDefaultsToFullComposition() {
+        let url = URL(fileURLWithPath: "/tmp/music.m4a")
+        let video = Video {
+            image(8.0, id: "main")
+        }
+        .audio(url: url)
+
+        let lanes = TimelineView.assignLanes(for: video, includeAudio: true)
+        let item = try? #require(lanes.last?.1.first)
+        #expect(CMTimeGetSeconds(item!.startTime) == 0)
+        #expect(CMTimeGetSeconds(item!.duration) == 8.0)
+    }
+
     @Test func transitionsStayInChainAndDoNotAdvanceCursor() {
         let video = Video {
             image(2.0, id: "a")

@@ -70,7 +70,7 @@ extension TimelineView {
             guard let track = clip as? Track else { continue }
             let start = track.startTime ?? .zero
             let items = walkTrack(track, anchoredAt: start)
-            lanes.append((.track(index: trackIndex, startTime: start, label: nil), items))
+            lanes.append((.track(index: trackIndex, startTime: start, label: track.name), items))
             trackIndex += 1
         }
 
@@ -94,12 +94,22 @@ extension TimelineView {
         // 4. Audio lanes.
         if includeAudio {
             for (i, audio) in video.audioTracks.enumerated() {
-                // AudioTrack has no per-track duration in Kadr 0.6 — it plays for
-                // the composition's duration. Use that as the lane block's width.
+                // Kadr 0.7: AudioTrack honors .at(time:) and .duration(_:). When unset
+                // the track plays from t=0 for the composition's full duration —
+                // matching the engine's insertion behavior.
+                let start = audio.startTime ?? .zero
+                let compositionEnd = video.duration
+                // Available window from start to composition end. Negative if start
+                // is past the composition end (in which case the engine skips the
+                // track entirely; we still surface a zero-width lane block for
+                // introspection consumers that want to see the declared track).
+                let availableWindow = CMTimeMaximum(.zero, CMTimeSubtract(compositionEnd, start))
+                let duration = audio.explicitDuration.map { CMTimeMinimum($0, availableWindow) }
+                    ?? availableWindow
                 let item = LaneItem(
                     clipID: nil,
-                    startTime: .zero,
-                    duration: video.duration,
+                    startTime: start,
+                    duration: duration,
                     kind: .audio
                 )
                 lanes.append((.audio(index: i, label: audio.url.lastPathComponent), [item]))
