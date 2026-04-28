@@ -46,6 +46,11 @@ struct EditorScreen: View {
 
 - ``TimelineView``
 
+### Audio waveforms (v0.5.3+)
+
+- ``AudioWaveform``
+- ``AudioWaveformLoader``
+
 ### Namespace
 
 - ``KadrUI/KadrUI``
