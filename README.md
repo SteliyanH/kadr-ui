@@ -80,7 +80,7 @@ Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift
 
 ## Roadmap
 
-See [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md). KadrUI ships on its own version track; v0.4.x covers the four components above. `TimelineView` is planned for v0.4.1.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (current: v0.5.3 audio waveforms; next: v0.6.0 editor primitives — inspector panel, keyframe editor, animated text preview), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
 
 ## License
 
