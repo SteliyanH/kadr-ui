@@ -24,6 +24,13 @@ Tiers 1 and 2 of the multi-lane `TimelineView` cycle (see [DESIGN.md](DESIGN.md#
 - Selection (`selectedClipID`) honors `ClipID` on any lane in the multi-lane render — tap a clip on a Track lane or a free-floater lane to update the binding.
 - Total tests: 87 (was 67 before v0.5.0 work).
 
+### Added — Tier 3 (audio lanes)
+
+- New `TimelineView` init param `showAudioLanes: Bool = true`. Default matches v0.4.x behavior; pass `false` to hide audio in either render path.
+- In the multi-lane render, audio tracks now appear as additional lanes at the bottom of the stack (one lane per `Video.audioTracks` entry). Each lane is a colored block sized to the composition duration, labeled by the audio file's last path component.
+- Branch decision between chain-only and multi-lane paths now uses non-audio lane count, so a chain-only composition with one audio track still takes the v0.4.x single-lane render (which has audio rendered inline at the bottom of the strip).
+- Total tests: 89.
+
 ### Tier 2 deferral
 
 - **Edit gestures (reorder, trim) are preserved only on the chain-only render path.** Multi-track compositions render every lane (including the implicit chain) read-only in v0.5.0. Index-translation between the original `video.clips` array and the chain-only sub-array adds complexity that's better staged into a v0.5.x edit-in-multi-track follow-up. The DESIGN-doc commitment "edit gestures preserved on lane 0" is honored only on the chain-only short-circuit; flag captured here to avoid surprise.

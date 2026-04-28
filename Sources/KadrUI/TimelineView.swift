@@ -37,6 +37,7 @@ public struct TimelineView: View {
     private let selectedClipID: Binding<ClipID?>?
     private let laneHeight: CGFloat
     private let laneSpacing: CGFloat
+    private let showAudioLanes: Bool
     private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
     private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
 
@@ -96,6 +97,7 @@ public struct TimelineView: View {
         selectedClipID: Binding<ClipID?>? = nil,
         laneHeight: CGFloat = 40,
         laneSpacing: CGFloat = 4,
+        showAudioLanes: Bool = true,
         onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
         onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
     ) {
@@ -104,6 +106,7 @@ public struct TimelineView: View {
         self.selectedClipID = selectedClipID
         self.laneHeight = laneHeight
         self.laneSpacing = laneSpacing
+        self.showAudioLanes = showAudioLanes
         self.onReorder = onReorder
         self.onTrim = onTrim
     }
@@ -112,10 +115,17 @@ public struct TimelineView: View {
         GeometryReader { geometry in
             let totalSeconds = compositionDuration()
             let pxPerSecond = totalSeconds > 0 ? geometry.size.width / totalSeconds : 0
-            let lanes = TimelineView.assignLanes(for: video, includeAudio: false)
+            let lanes = TimelineView.assignLanes(for: video, includeAudio: showAudioLanes)
+            // Branch on non-audio lane count: a chain-only Video (with or without audio
+            // tracks) takes the v0.4.x render path, where audio is rendered inline at
+            // the bottom of the strip. Genuine multi-track compositions take the
+            // multi-lane path, where audio renders as additional lanes.
+            let nonAudioLaneCount = lanes.reduce(into: 0) { acc, lane in
+                if case .audio = lane.0 {} else { acc += 1 }
+            }
 
             ZStack(alignment: .topLeading) {
-                if lanes.count <= 1 {
+                if nonAudioLaneCount <= 1 {
                     // Chain-only short-circuit — pixel-identical to v0.4.x.
                     clipStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
                 } else {
@@ -235,7 +245,7 @@ public struct TimelineView: View {
             }
             .frame(height: 40)
 
-            if !video.audioTracks.isEmpty {
+            if showAudioLanes && !video.audioTracks.isEmpty {
                 audioLane(totalSeconds: totalSeconds, pxPerSecond: pxPerSecond)
                     .frame(height: 12)
             }
