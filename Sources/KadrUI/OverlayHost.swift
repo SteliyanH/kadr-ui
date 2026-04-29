@@ -225,12 +225,16 @@ public struct OverlayHost: View {
 
     @ViewBuilder
     private func textOverlayView(_ overlay: TextOverlay) -> some View {
-        let style = overlay.style
-        Text(overlay.text)
-            .font(font(for: style))
-            .foregroundStyle(Color(platformColor: style.color))
-            .multilineTextAlignment(textAlignment(for: style.alignment))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frameAlignment(for: style.alignment))
+        if overlay.textAnimation != nil {
+            AnimatedTextLayerView(overlay: overlay)
+        } else {
+            let style = overlay.style
+            Text(overlay.text)
+                .font(font(for: style))
+                .foregroundStyle(Color(platformColor: style.color))
+                .multilineTextAlignment(textAlignment(for: style.alignment))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frameAlignment(for: style.alignment))
+        }
     }
 
     @ViewBuilder
