@@ -201,3 +201,142 @@ Pure helpers carry the weight, same pattern as the existing `TimelineViewTests` 
 - **Default for `showAudioLanes`** — true (show by default, callers opt out) is friendlier for new users; false (opt in) keeps the visual minimal. Currently leaning **true**, can revisit in tier 3.
 - **Lane label text for Tracks** — `Track` doesn't carry a name in Kadr 0.6. Either generate `"Track 1"`, `"Track 2"`, … or extend Kadr to add an optional `Track(name:)`. v0.5.0 ships generated names; the Kadr-side change is a separate RFC if it's worth doing.
 - **Lane reordering** — should the user be able to drag lanes vertically to change z-order? Kadr 0.6's z-order is fixed by declaration order, so this would require Kadr DSL changes too. Defer until requested.
+
+## v0.6 — Editor primitives
+
+Depends on **kadr v0.8.0+** (per-clip Transform, keyframe `Animation<T>`, animated `TextOverlay`, audio cross-fades). Adds the SwiftUI surfaces that turn `TimelineView` into a real editor — tap a clip and edit its properties, animate them with keyframes, preview animated text faithfully, see audio cross-fades on the timeline. Pure additive; every v0.5.x call site continues to compile and renders identically.
+
+### Scope lock
+
+In scope:
+- **`InspectorPanel(video:selectedClipID:onTransform:onOpacity:onFilterIntensity:)`** — tap a clip on the timeline, slide-up panel with sliders for the v0.8 surface (Transform fields, opacity, animatable filter intensity). Callback shape mirrors `TimelineView.onReorder` / `onTrim` — consumer rebuilds the `Video`.
+- **`KeyframeEditor(video:selectedClipID:currentTime:on…)`** — per-property tracks below `TimelineView`. Tap to add a keyframe at the current playhead, long-press to remove, drag to retime. One row per animatable property of the selected clip (Transform / Opacity / Filter[i]).
+- **Animated text preview in `OverlayHost`** — when a `TextOverlay` carries `textAnimation`, the SwiftUI bridge view runs the matching `[CAAnimation]` so preview matches export. Static text continues to use the existing SwiftUI `Text` fast path.
+- **TimelineView audio cross-fade glyphs** — small markers on the audio lane where adjacent `AudioTrack`s overlap with `crossfadeDuration` set. Visual-only; no gestures.
+
+Out of scope (deferred to v0.6.x or later):
+- Cross-lane drag (move a clip from chain → Track or between Tracks)
+- Editing inside `Track {}` blocks (reorder/trim within a Track)
+- Animated overlay layout preview (`positionAnimation` / `sizeAnimation` previewed in the player; defer until v0.6.x — engine bakes them into export already)
+- Custom keyframe-marker styling (fixed white circles in v0.6.0)
+- Snap-to-frame-rate when retiming keyframes
+
+### API examples
+
+```swift
+// 1. Inspector panel below the timeline.
+struct EditorScreen: View {
+    @State var clips: [any Clip]
+    @State var selectedClipID: ClipID?
+    @State var playheadTime: CMTime = .zero
+
+    var video: Video {
+        Video { for clip in clips { clip } }
+    }
+
+    var body: some View {
+        VStack {
+            VideoPreview(video)
+            TimelineView(video, currentTime: $playheadTime, selectedClipID: $selectedClipID)
+            KeyframeEditor(
+                video,
+                selectedClipID: $selectedClipID,
+                currentTime: $playheadTime,
+                onAdd: { id, prop, time in addKeyframe(id, prop, time) },
+                onRemove: { id, prop, time in removeKeyframe(id, prop, time) },
+                onRetime: { id, prop, oldTime, newTime in retimeKeyframe(id, prop, oldTime, newTime) }
+            )
+            InspectorPanel(
+                video,
+                selectedClipID: $selectedClipID,
+                onTransform: { id, transform in applyTransform(id, transform) },
+                onOpacity: { id, opacity in applyOpacity(id, opacity) },
+                onFilterIntensity: { id, filterIndex, intensity in applyFilterIntensity(id, filterIndex, intensity) }
+            )
+        }
+    }
+}
+```
+
+### Key decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| API shape | Property-callback pattern (one closure per editable property) | Matches the existing `TimelineView.onReorder` / `onTrim` shape. Kadr's `Video` is immutable; consumers rebuild via the callbacks. Keeps the editor stateless from kadr-ui's perspective. |
+| Inspector binding model | `selectedClipID: Binding<ClipID?>` + per-property `on…` callbacks | Selection state is consumer-owned (matches TimelineView). Property edits flow through callbacks the consumer applies to its `[any Clip]` array. No `@Binding<Clip>` because Kadr clip types aren't a mutable target — they're value-type rebuild-on-edit. |
+| Keyframe identification | `KeyframeProperty` enum: `.transform` / `.opacity` / `.filter(index: Int)` | Each animatable property gets its own keyframe-list. The engine path for `Filter` intensity already keys by filter index in `filterAnimations`, so the editor mirrors that. |
+| Keyframe gestures | Tap to add at `currentTime`, long-press to remove, drag to retime | Standard timeline-editor conventions. Matches CapCut / IMG.LY / VideoLab. Snap-to-frame deferred. |
+| Animated text preview | `UIViewRepresentable` / `NSViewRepresentable` wrapping a CALayer + CAAnimation when `TextOverlay.textAnimation != nil` | Fidelity matches the export's `AVVideoCompositionCoreAnimationTool` path (engine uses CALayer + CAAnimation for animated text). SwiftUI primitives can't reproduce all CAAnimation shapes faithfully (kerning, custom paths, etc.). Static text keeps the SwiftUI `Text` fast path. |
+| Crossfade glyph | Small white triangle pointing across the boundary in the audio lane | Visual-only, non-interactive in v0.6. Engine handles the crossfade math; the glyph is a passive indicator. Style tweakable in v0.6.x. |
+| `KeyframeEditor` height | Defaults to a sensible per-row height (24px) plus 4px spacing; total = `numProperties × 28px` | Avoids forcing callers to compute. They can override via SwiftUI `.frame(...)` like every other component. |
+| Filter intensity slider range | Per-filter, baked into the panel — `.brightness` shows -1...1, `.gaussianBlur` shows 0...50, etc. | Matches each preset's natural range. Consumer code doesn't need to know the ranges. Inspector handles them; out-of-range values clamp at slider edges. |
+
+### Public surface sketch
+
+```swift
+public struct InspectorPanel: View {
+    public init(
+        _ video: Video,
+        selectedClipID: Binding<ClipID?>,
+        onTransform: ((ClipID, Transform) -> Void)? = nil,
+        onOpacity: ((ClipID, Double) -> Void)? = nil,
+        onFilterIntensity: ((ClipID, _ filterIndex: Int, _ intensity: Double) -> Void)? = nil
+    )
+}
+
+public struct KeyframeEditor: View {
+    public init(
+        _ video: Video,
+        selectedClipID: Binding<ClipID?>,
+        currentTime: Binding<CMTime>,
+        rowHeight: CGFloat = 24,
+        rowSpacing: CGFloat = 4,
+        onAdd: ((ClipID, KeyframeProperty, CMTime) -> Void)? = nil,
+        onRemove: ((ClipID, KeyframeProperty, CMTime) -> Void)? = nil,
+        onRetime: ((ClipID, KeyframeProperty, _ from: CMTime, _ to: CMTime) -> Void)? = nil
+    )
+}
+
+public enum KeyframeProperty: Sendable, Hashable {
+    case transform
+    case opacity
+    case filter(index: Int)
+}
+
+// OverlayHost gains an internal CALayer-backed bridge view; no public surface change.
+// TimelineView gains an internal crossfade-glyph render path; no public surface change.
+```
+
+### Tier breakdown
+
+Mirrors the established RFC-then-tiers staging.
+
+- **Tier 0** *(this PR)* — design doc only. Bumps Kadr dep floor to 0.8.0.
+- **Tier 1** — `InspectorPanel`. Sliders for Transform (center / rotation / scale / anchor), opacity, and per-filter intensity. Callback wiring. ~250 LOC + tests.
+- **Tier 2** — `KeyframeEditor`. Per-property track rendering, tap-to-add, long-press-to-remove, drag-to-retime. The biggest tier of the cycle. ~400 LOC + tests.
+- **Tier 3** — Animated text preview. `UIViewRepresentable` / `NSViewRepresentable` bridge for `TextOverlay`s with `textAnimation`. ~150 LOC + tests.
+- **Tier 4** — TimelineView crossfade glyphs. Detect overlapping `AudioTrack`s with `crossfadeDuration`; render small triangle markers in the audio lane. ~80 LOC + tests.
+- **Tier 5** — Release prep: CHANGELOG, README compat row, ROADMAP entry, develop → main release flow.
+
+### Test strategy
+
+Mirrors the v0.5 RFC's pattern — pure helpers carry the bulk:
+
+- **Inspector** — pure helper `clipFor(id:in:)` extracts a clip from `Video.clips` by `ClipID`. Modifier tests: each on… callback wires through. Smoke tests (`@MainActor`) on the View body.
+- **KeyframeEditor** — pure helpers: `keyframesForProperty(_:on:)`, `propertyOptions(for:)`. Smoke tests on the body.
+- **Animated text preview** — bridge view smoke tests (no faithful CAAnimation playback in unit tests; visual fidelity verified via the example app).
+- **Crossfade glyphs** — pure detection helper `crossfadeBoundaries(in: Video) -> [CMTime]`. Smoke test on TimelineView body.
+
+Target coverage: ~25 new tests across the cycle. Suite floor: 119.
+
+### Compatibility
+
+- KadrUI 0.6.0 requires Kadr ≥ 0.8.0 (uses `Transform`, `Animation<T>`, `TextAnimation`, `AudioTrack.crossfadeDuration`).
+- v0.5.x call sites: source-compatible. All existing init params keep their meaning. New components are additive.
+- README compatibility table: add `0.6.0 | ≥ 0.8.0`.
+
+### Open questions (track in PRs, not blocking RFC merge)
+
+- **Inspector layout direction** — vertical sliders stacked, or horizontal slider rows? Currently leaning **horizontal rows** (label on left, slider in middle, value on right) to match iOS settings-screen conventions. Revisit in tier 1.
+- **KeyframeEditor zoom-to-fit** — should the editor's time axis match the parent `TimelineView`'s zoom level (when zoom ships in v0.6.x), or always show the selected clip's full lifetime? Defer to when zoom lands.
+- **Crossfade glyph style** — triangle / hourglass / X-mark / custom shape. Triangle pointing along the timeline is the lowest-friction default; revisit if anyone asks.
