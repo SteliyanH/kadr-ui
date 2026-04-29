@@ -6,7 +6,7 @@
 
 **SwiftUI components for [Kadr](https://github.com/SteliyanH/kadr) — preview, scrub, and overlay-edit `Video` compositions in your own UI.**
 
-KadrUI consumes Kadr's v0.4.0 introspection and preview primitives (`Video.makePlayerItem`, `Video.thumbnail(at:)`, `Layout.resolveFrame`) to provide drop-in SwiftUI views: an `AVPlayer`-backed preview, a horizontal thumbnail strip, an overlay layer with built-in renderers and a custom hook, and gesture modifiers that hit-test through Kadr's `LayerID`.
+KadrUI consumes Kadr's introspection and preview surface (`Video.makePlayerItem`, `Video.thumbnail(at:)`, `Layout.resolveFrame`, `Video.clips`, `Track`, `AudioTrack`) to provide drop-in SwiftUI views: an `AVPlayer`-backed preview, a horizontal thumbnail strip, an overlay layer with built-in renderers and a custom hook, gesture modifiers that hit-test through `LayerID`, and a multi-lane `TimelineView` with selection / drag-to-reorder / live trim / tap-to-scrub and audio waveforms.
 
 ## Quick Start
 
@@ -18,6 +18,7 @@ import Kadr
 struct EditorScreen: View {
     let video: Video
     @State private var selectedLayerID: LayerID?
+    @State private var selectedClipID: ClipID?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -28,6 +29,15 @@ struct EditorScreen: View {
                     .onLayerDrag(onEnded: { id, t in commit(id, offset: t) })
             }
             .aspectRatio(9.0 / 16.0, contentMode: .fit)
+
+            TimelineView(
+                video,
+                selectedClipID: $selectedClipID,
+                showAudioWaveforms: true,
+                onReorder: { _, _, newClips in /* rebuild Video with newClips */ },
+                onTrim: { idx, leading, trailing in /* rebuild clip with trims */ }
+            )
+            .frame(height: 80)
 
             ThumbnailStrip(video, count: 12)
                 .frame(height: 60)
@@ -50,17 +60,17 @@ struct EditorScreen: View {
 
 ### Why a separate package?
 
-Kadr 0.4.0 exposes the playback / thumbnail / introspection primitives, but intentionally **does not bake overlays into the preview surface** — `AVVideoCompositionCoreAnimationTool` is export-only and crashes on a playback `videoComposition`. KadrUI renders overlays as SwiftUI views over the player, which is also the only way SwiftUI gestures can hit-test them. The export pipeline still bakes overlays into the on-disk file.
+Kadr exposes the playback / thumbnail / introspection primitives, but intentionally **does not bake overlays into the preview surface** — `AVVideoCompositionCoreAnimationTool` is export-only and crashes on a playback `videoComposition`. KadrUI renders overlays as SwiftUI views over the player, which is also the only way SwiftUI gestures can hit-test them. The export pipeline still bakes overlays into the on-disk file.
 
 ## Installation
 
 Add KadrUI to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", from: "0.4.0"),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", from: "0.5.3"),
 ```
 
-Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively (≥ `0.4.0`).
+Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively (≥ `0.7.0`).
 
 ## Compatibility
 
@@ -80,7 +90,7 @@ Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (current: v0.5.3 audio waveforms; next: v0.6.0 editor primitives — inspector panel, keyframe editor, animated text preview), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.5.3 audio waveforms; in design: v0.6.0 editor primitives — `InspectorPanel`, `KeyframeEditor`, animated text preview, audio cross-fade glyphs — see [DESIGN.md](DESIGN.md)), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
 
 ## License
 
