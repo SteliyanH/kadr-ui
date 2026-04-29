@@ -4,6 +4,30 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-04-29
+
+Editor primitives. KadrUI catches up to Kadr 0.8 (Transform / Animation / animated `TextOverlay`) and ships the SwiftUI surfaces that turn the timeline into a real editor: a per-clip property panel, a per-property keyframe track, an animated text preview path that matches export, and audio cross-fade indicators on the timeline.
+
+Bumps the Kadr dep floor to **0.8.4** (uses `Transform`, `Animation<T>`, `TextAnimation`, `AudioTrack.crossfadeDuration`, and the `gaussianBlur` / `vignette` / `sharpen` / `zoomBlur` / `glow` filter presets).
+
+### Added
+
+- **`InspectorPanel`** — sliders for the v0.8 per-clip surface. Position X/Y, rotation, scale, anchor (Transform), opacity, and an intensity slider for each animatable filter on the selected clip. Edits surface through callbacks shaped after `TimelineView.onTrim` / `onReorder` — `InspectorPanel` never mutates the (immutable) `Video`. Pure helpers exposed: `clipFor(id:in:)`, `normalizedXY(of:)`, `scalar(of:)`, `range(of:)`, ordered `allAnchors`, label helpers for `Anchor` and `Filter`.
+- **`KeyframeEditor`** — per-property keyframe track surface that pairs with `TimelineView` via the existing `selectedClipID` binding. One row per animatable property of the selected clip (`.transform` / `.opacity` / `.filter(index:)`), markers placed at clip-relative keyframe times. **Tap** an empty row → `onAdd` at the playhead (mapped to clip-relative via `clipStartTime`). **Long-press** a marker → `onRemove`. **Drag** a marker horizontally → `onRetime` on release. Pure helpers: `propertyOptions(for:)`, `keyframesForProperty(_:on:)`, `clipStartTime(for:in:)`. New public type `KeyframeProperty`.
+- **Animated `TextOverlay` preview in `OverlayHost`** — when a `TextOverlay` carries a `textAnimation`, `OverlayHost` routes through a `UIViewRepresentable` / `NSViewRepresentable` bridge hosting a `CATextLayer` and runs `TextAnimation.makeAnimations(for:)` against the live layer so preview matches export. Begin-time remap shifts each animation's `beginTime` by `CACurrentMediaTime() - AVCoreAnimationBeginTimeAtZero` so playthroughs start now while preserving positive offsets relative to t=0.
+- **`TimelineView` audio crossfade glyphs** — every overlapping `AudioTrack` pair where at least one side carries a non-zero `crossfadeDuration` shows a small two-triangles-meeting marker at the overlap midpoint on every audio lane. Visual-only, non-interactive. Tracks without `explicitDuration` are skipped (UI can't compute the end time without an async asset load).
+
+### Tests
+
+- 45 new tests across the cycle: `InspectorPanelTests` (15), `KeyframeEditorTests` (15), `AnimatedTextLayerViewTests` (7), `CrossfadeBoundariesTests` (8). Suite: 119 → 164.
+
+### Notes
+
+- `OverlayHost` public surface is unchanged — the bridge is internal; the only behavior change is that animated `TextOverlay`s now animate in preview.
+- The crossfade glyph style is fixed in v0.6.0 (white-on-lane, two-triangles-meeting). Custom styling waits for community demand.
+- `KeyframeEditor`'s clip-relative time mapping handles top-level chain clips and free-floaters; clips inside `Track {}` blocks fall back to the track's start time (no per-inner accumulation).
+- Inspector-for-overlays, speed-curve UI, and caption editor are deferred to v0.7+ alongside the Kadr v0.9 surface they depend on.
+
 ## [0.5.3] - 2026-04-28
 
 Audio waveforms in `TimelineView`. Closes the v0.5.x deferred item from the multi-lane RFC. Pure additive — every v0.5.2 call site renders identically; waveforms only appear when callers opt in via `showAudioWaveforms: true`.

@@ -37,14 +37,14 @@ Track lane labels honor `Track.name`; audio lane blocks honor `AudioTrack.startT
 
 `AudioWaveform` value type, `AudioWaveformLoader.load(url:sampleCount:)`, `TimelineView(showAudioWaveforms:)`. Symmetric vertical-bar render via internal `AudioWaveformShape`.
 
-## v0.6.0 — Editor primitives
+## v0.6.0 — Editor primitives ✓ shipped
 
-Depends on **kadr v0.8.0** (per-clip Transform, keyframe animations, animated TextOverlay). Adds the SwiftUI surfaces that turn the timeline into a real editor.
+Bumps Kadr dep floor to v0.8.4. Adds the SwiftUI surfaces that turn the timeline into a real editor.
 
-- **`InspectorPanel(video:selectedClipID:)`** — tap a clip on the timeline → property panel with Transform sliders (position / rotation / scale / anchor), per-clip Filter intensity sliders, opacity slider. Wires through callbacks the same way `TimelineView.onTrim` / `onReorder` do.
-- **Keyframe editor surface** — per-property tracks rendered below `TimelineView`, tap to add/remove keyframe markers. Drives a binding-based callback for the consumer to rebuild the `Video` with new `Animation<T>` values.
-- **`OverlayHost` animated text preview** — when a `TextOverlay` carries `[CAAnimation]`, the SwiftUI bridge view runs the animations live so preview matches export.
-- **TimelineView audio cross-fade glyphs** — small triangle / hourglass markers in audio lanes where two adjacent `AudioTrack`s overlap. Hooks into the kadr v0.8 cross-fade surface.
+- **`InspectorPanel(video:selectedClipID:)`** — tap a clip on the timeline → property panel with Transform sliders (position / rotation / scale / anchor), per-clip Filter intensity sliders, opacity slider. Callbacks shaped after `TimelineView.onTrim` / `onReorder`.
+- **`KeyframeEditor(video:selectedClipID:currentTime:)`** — per-property tracks below `TimelineView`. Tap-to-add at playhead, long-press to remove, drag to retime. One row per animatable property (`.transform` / `.opacity` / `.filter(index:)`).
+- **`OverlayHost` animated text preview** — when a `TextOverlay` carries a `textAnimation`, a `UIViewRepresentable` / `NSViewRepresentable` bridge runs the `[CAAnimation]` against a live `CATextLayer` so preview matches export.
+- **TimelineView audio cross-fade glyphs** — two-triangles-meeting markers in audio lanes at every `AudioTrack` overlap with non-zero `crossfadeDuration`.
 
 ## v0.7.0+ — Speed curve UI / caption editor
 
@@ -81,7 +81,7 @@ Tracks Kadr v1.0.
 | 0.4.4 | ≥ 0.5.0 *(uses `Overlay.visibilityRange`)* |
 | 0.5.0 / 0.5.1 | ≥ 0.6.0 *(uses `Track`, `Clip.startTime`)* |
 | 0.5.2 / 0.5.3 | ≥ 0.7.0 *(uses `Track.name`, `AudioTrack.startTime`, `AudioTrack.explicitDuration`)* |
-| 0.6.0 *(planned)* | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`)* |
+| 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
 | 0.7.x *(planned)* | ≥ 0.9.0 |
 | 1.0.0 *(planned)* | ≥ 1.0.0 |
 

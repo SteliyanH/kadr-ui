@@ -56,7 +56,10 @@ struct EditorScreen: View {
 | `ThumbnailStrip(_ video:, count:)` | Horizontal strip of evenly-spaced composition thumbnails | `Kadr.Video.thumbnail(at:)` |
 | `OverlayHost(_ video:, customRenderer:)` | Renders Kadr `Overlay`s as SwiftUI views over the player | `Kadr.Layout.resolveFrame(...)` |
 | `.onLayerTap` / `.onLayerDrag` | Gesture modifiers on `OverlayHost`, hit-tested through `LayerID` | `Kadr.LayerID` |
-| **`TimelineView`** *(v0.4.1, polished v0.4.2 / v0.4.3, multi-lane v0.5)* | Visual timeline with playhead, tap-to-select, drag-to-reorder (neighbors slide to make space), trim handles, live trim resize, tap-to-scrub. Stacks lanes for Kadr 0.6 multi-track compositions (`Track {}`, `.at(time:)`, audio tracks) | `Kadr.Video.clips`, `Kadr.ClipID`, `Kadr.Track` |
+| **`TimelineView`** *(v0.4.1, polished v0.4.2 / v0.4.3, multi-lane v0.5, crossfade glyphs v0.6)* | Visual timeline with playhead, tap-to-select, drag-to-reorder (neighbors slide to make space), trim handles, live trim resize, tap-to-scrub. Stacks lanes for Kadr 0.6 multi-track compositions (`Track {}`, `.at(time:)`, audio tracks). Audio crossfade indicators on overlapping tracks. | `Kadr.Video.clips`, `Kadr.ClipID`, `Kadr.Track`, `Kadr.AudioTrack.crossfadeDuration` |
+| **`InspectorPanel`** *(v0.6)* | Per-clip property panel: Transform sliders (position / rotation / scale / anchor), opacity, animatable filter intensities. Edits surface through callbacks like `TimelineView.onTrim` | `Kadr.Transform`, `Kadr.Filter`, `Kadr.Clip.opacity` |
+| **`KeyframeEditor`** *(v0.6)* | Per-property keyframe tracks. Tap-to-add at playhead, long-press to remove, drag to retime. One row per animatable property (`.transform` / `.opacity` / `.filter(index:)`) | `Kadr.Animation<T>`, `Kadr.Clip.transformAnimation`, `Kadr.Clip.opacityAnimation`, `Kadr.VideoClip.filterAnimations` |
+| **Animated `TextOverlay` preview** *(v0.6)* | When a `TextOverlay` carries a `textAnimation`, `OverlayHost` runs the `[CAAnimation]` against a live `CATextLayer` so preview matches export | `Kadr.TextAnimation` |
 
 ### Why a separate package?
 
@@ -67,10 +70,10 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 Add KadrUI to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", from: "0.5.3"),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", from: "0.6.0"),
 ```
 
-Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively (≥ `0.7.0`).
+Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively (≥ `0.8.0`).
 
 ## Compatibility
 
@@ -85,12 +88,13 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.5.1 | ≥ 0.6.0 |
 | 0.5.2 | ≥ 0.7.0 *(uses `Track.name`, `AudioTrack.startTime`, `AudioTrack.explicitDuration`)* |
 | 0.5.3 | ≥ 0.7.0 |
+| 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.5.3 audio waveforms; in design: v0.6.0 editor primitives — `InspectorPanel`, `KeyframeEditor`, animated text preview, audio cross-fade glyphs — see [DESIGN.md](DESIGN.md)), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.6.0 editor primitives — `InspectorPanel`, `KeyframeEditor`, animated text preview, audio cross-fade glyphs; next: v0.7+ speed-curve UI / caption editor), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
 
 ## License
 
