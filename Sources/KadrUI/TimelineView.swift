@@ -279,6 +279,16 @@ public struct TimelineView: View {
                 }()
                 laneItemBlock(item: item, pxPerSecond: pxPerSecond, waveform: waveform)
             }
+            if case .audio = lane.0 {
+                ForEach(TimelineView.crossfadeBoundaries(in: video), id: \.value) { boundary in
+                    let x = max(0, CMTimeGetSeconds(boundary) * pxPerSecond)
+                    CrossfadeGlyph()
+                        .frame(width: 10, height: 10)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .position(x: x, y: laneHeight / 2)
+                        .allowsHitTesting(false)
+                }
+            }
             if showLaneLabels, let label = TimelineView.laneLabel(for: lane.0) {
                 Text(label)
                     .font(.caption2)
@@ -941,5 +951,30 @@ private struct Triangle: Shape {
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
         path.closeSubpath()
         return path
+    }
+}
+
+/// Two opposing triangles meeting at the centerline — the audio crossfade marker. The
+/// left triangle points right, the right triangle points left, evoking the cross of
+/// two fading audio tracks. Visual-only; non-interactive.
+private struct CrossfadeGlyph: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            Path { path in
+                // Left triangle pointing right.
+                path.move(to: CGPoint(x: 0, y: 0))
+                path.addLine(to: CGPoint(x: 0, y: h))
+                path.addLine(to: CGPoint(x: w / 2, y: h / 2))
+                path.closeSubpath()
+                // Right triangle pointing left.
+                path.move(to: CGPoint(x: w, y: 0))
+                path.addLine(to: CGPoint(x: w, y: h))
+                path.addLine(to: CGPoint(x: w / 2, y: h / 2))
+                path.closeSubpath()
+            }
+            .fill(.foreground)
+        }
     }
 }
