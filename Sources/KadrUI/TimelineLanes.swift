@@ -253,4 +253,58 @@ extension TimelineView {
         if clip is TitleSequence { return .title }
         return nil
     }
+
+    /// Composition-time midpoints of every overlapping ``Kadr/AudioTrack`` pair where
+    /// at least one side carries a non-zero ``Kadr/AudioTrack/crossfadeDuration``. The
+    /// renderer drops a small triangle glyph at each returned time on every audio lane,
+    /// so the marker visually lines up with the overlap regardless of which lane the
+    /// eye lands on. Pure helper — exposed for unit tests.
+    ///
+    /// Tracks without an ``Kadr/AudioTrack/explicitDuration`` (we'd need an async asset
+    /// load to know their end time) are skipped: better to under-emit than mislead. If
+    /// both tracks in a pair lack `explicitDuration`, the pair is skipped. If only one
+    /// does, the pair is also skipped — we can't compute the overlap range.
+    nonisolated internal static func crossfadeBoundaries(in video: Video) -> [CMTime] {
+        let tracks = video.audioTracks
+        var boundaries: [CMTime] = []
+        guard tracks.count >= 2 else { return boundaries }
+        for i in 0..<tracks.count {
+            for j in (i + 1)..<tracks.count {
+                if let mid = crossfadeMidpoint(between: tracks[i], and: tracks[j]) {
+                    boundaries.append(mid)
+                }
+            }
+        }
+        return boundaries
+    }
+
+    nonisolated private static func crossfadeMidpoint(
+        between a: AudioTrack,
+        and b: AudioTrack
+    ) -> CMTime? {
+        guard let aDur = a.explicitDuration, let bDur = b.explicitDuration else { return nil }
+        let aStart = a.startTime ?? .zero
+        let bStart = b.startTime ?? .zero
+        let aEnd = CMTimeAdd(aStart, aDur)
+        let bEnd = CMTimeAdd(bStart, bDur)
+        let firstEnd: CMTime
+        let secondStart: CMTime
+        if CMTimeCompare(aStart, bStart) <= 0 {
+            firstEnd = aEnd
+            secondStart = bStart
+            // Reject if a actually ends after b starts but doesn't reach b's interior.
+            _ = bEnd
+        } else {
+            firstEnd = bEnd
+            secondStart = aStart
+            _ = aEnd
+        }
+        guard CMTimeCompare(firstEnd, secondStart) > 0 else { return nil }
+        let aHasCF = (a.crossfadeDuration.map { CMTimeCompare($0, .zero) > 0 }) ?? false
+        let bHasCF = (b.crossfadeDuration.map { CMTimeCompare($0, .zero) > 0 }) ?? false
+        guard aHasCF || bHasCF else { return nil }
+        let overlapDur = CMTimeSubtract(firstEnd, secondStart)
+        let halfOverlap = CMTimeMultiplyByFloat64(overlapDur, multiplier: 0.5)
+        return CMTimeAdd(secondStart, halfOverlap)
+    }
 }
