@@ -13,7 +13,7 @@ let package = Package(
         .library(name: "KadrUI", targets: ["KadrUI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/SteliyanH/kadr.git", from: "0.7.0"),
+        .package(url: "https://github.com/SteliyanH/kadr.git", from: "0.8.4"),
     ],
     targets: [
         .target(
