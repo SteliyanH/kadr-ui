@@ -46,6 +46,10 @@ Bumps Kadr dep floor to v0.8.4. Adds the SwiftUI surfaces that turn the timeline
 - **`OverlayHost` animated text preview** — when a `TextOverlay` carries a `textAnimation`, a `UIViewRepresentable` / `NSViewRepresentable` bridge runs the `[CAAnimation]` against a live `CATextLayer` so preview matches export.
 - **TimelineView audio cross-fade glyphs** — two-triangles-meeting markers in audio lanes at every `AudioTrack` overlap with non-zero `crossfadeDuration`.
 
+## v0.7.1 — Track-lane trim handles ✓ shipped
+
+Patch closing the v0.7.0 deferral. Trim handles now render on every non-transition Track-lane clip when `onTrackTrim` is non-`nil`; drag morphs live width and fires the callback on release. No public API changes.
+
 ## v0.7.0 — Timeline zoom + Track-internal reorder ✓ shipped
 
 Bumps Kadr dep floor to **v0.10.0**. Long compositions become usable, and Track lanes are no longer read-only.
