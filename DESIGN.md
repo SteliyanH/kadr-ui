@@ -490,3 +490,130 @@ Target test count: ~30 new tests. Suite floor: 164 → ~194.
 - **Vertical scroll for many lanes.** A composition with 6+ tracks plus audio gets tall. v0.7 doesn't add vertical scroll inside `TimelineView` — consumers wrap in their own `ScrollView` if needed. Revisit if real users hit it.
 - **Zoom-state persistence.** `TimelineZoom` is per-view state; consumers persist it themselves (e.g. in a `ProjectStore`). Should `TimelineView` offer a "remembered zoom" affordance? Probably not — keep state ownership explicit.
 - **Track-row trim on the *whole* track.** "Trim every clip in this track to fit under 5 seconds" — niche. Consumers can do this themselves by iterating `track.clips` and applying their own trim math.
+
+---
+
+## v0.8 — SpeedCurveEditor / CaptionEditor / OverlayInspector
+
+**Status:** RFC. Tier 0 only — no code.
+
+### Motivation
+
+Three editor surfaces have been deferred since v0.6 — they're listed in the v0.6 CHANGELOG as "deferred to v0.7+" and got nudged again to v0.7+ as the timeline-zoom + Track-internal-reorder cycle took priority. They're the last gaps blocking `kadr-reels-studio` from being a complete editor demo and they all consume kadr ≥ 0.9 surface that's already public — no kadr v0.11 cycle needed.
+
+- **Speed-curve editor** — kadr v0.9 shipped `VideoClip.speed(curve: Animation<Double>)` and exposes `speedCurve: Animation<Double>?` as a public read-only property. There's no SwiftUI surface to author the curve. Consumers writing inspector UIs end up either hard-coding presets or skipping speed entirely.
+- **Caption editor** — kadr v0.9.2 made `Video.captions(_:)` and the `Caption` struct public. Reels-studio can ingest captions via `kadr-captions`' parsers, but there's no surface to add / edit / retime cues after import.
+- **Inspector for overlays** — `InspectorPanel` (v0.6) only handles per-`Clip` properties: Transform / Filter / opacity. Overlay types (`TextOverlay`, `StickerOverlay`, `ImageOverlay`, `Watermark`) have no inspector surface. Reels-studio's `AddOverlaySheet` defers image overlays to v0.1.x partly because there's no editor to follow up the add.
+
+### Public API
+
+```swift
+// MARK: - Tier 1: SpeedCurveEditor
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+public struct SpeedCurveEditor: View {
+    public init(
+        clip: VideoClip,
+        currentTime: Binding<CMTime>? = nil,
+        height: CGFloat = 80,
+        onUpdate: @escaping (Animation<Double>?) -> Void
+    )
+}
+```
+
+- Vertical axis = speed multiplier (clamped to display range `0.25...4.0`, with `1.0` rendered as a baseline gridline).
+- Horizontal axis = clip-relative time (`0...trimRange.duration`).
+- **Tap empty area** → add keyframe at that (time, multiplier).
+- **Drag a marker** horizontally → retime; vertically → rescale the multiplier.
+- **Long-press a marker** → remove.
+- Picker for `TimingFunction` (linear / easeIn / easeOut / easeInOut / cubicBezier presets).
+- Passing `nil` to `onUpdate` clears the curve (consumer calls `clip.speed(1.0)` to reset to flat playback, or `clip.speed(curve:)` with the new animation).
+- `currentTime` binding (optional) overlays a vertical playhead synced to the host's playback time, mirroring `TimelineView`'s pattern.
+
+```swift
+// MARK: - Tier 2: CaptionEditor
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+public struct CaptionEditor: View {
+    public init(
+        captions: [Caption],
+        compositionDuration: CMTime,
+        currentTime: Binding<CMTime>? = nil,
+        onUpdate: @escaping ([Caption]) -> Void
+    )
+}
+```
+
+- Vertical list of cues sorted by `timeRange.start`.
+- Each row: text field (multi-line), start / end timestamp fields, "delete" button, "set start to playhead" / "set end to playhead" shortcuts (active when `currentTime` is bound).
+- "+ Add cue" — appends a new `Caption(text: "", timeRange: <2-second window starting at currentTime ?? composition mid>)`.
+- Reorder is implicit (sort by start time on every emit) — no drag handles.
+- `compositionDuration` is the upper bound for end-time validation (cues outside `[0, duration]` get red-bordered but aren't dropped silently).
+- `onUpdate` fires on every commit (text-field blur / timestamp edit / +/- tap). Consumer rebuilds `Video` via `video.captions(newCues)`.
+
+```swift
+// MARK: - Tier 3: OverlayInspector extension
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension InspectorPanel {
+
+    /// Overlay-targeted variant of `InspectorPanel`. Same callback shape; one
+    /// inspector renders all four built-in overlay kinds via type dispatch.
+    public init(
+        video: Video,
+        selectedOverlayID: Binding<LayerID?>,
+        onUpdate: @escaping (LayerID, OverlayUpdate) -> Void
+    )
+}
+
+public enum OverlayUpdate: Sendable {
+    /// Plain `TextOverlay` text / font / color / position / opacity / animation.
+    case text(TextOverlayUpdate)
+    /// `StickerOverlay` source / scale / position / opacity.
+    case sticker(StickerOverlayUpdate)
+    /// `ImageOverlay` source / position / opacity.
+    case image(ImageOverlayUpdate)
+    /// `Watermark` text / corner / opacity.
+    case watermark(WatermarkUpdate)
+}
+```
+
+- Overlay-update structs mirror existing kadr Overlay constructor params; consumers route them back into a fresh `Video { ... overlay(...) }` rebuild.
+- Surface picks the inspector body by inspecting the selected layer ID's underlying overlay type (via `Video.overlays.first { $0.layerID == id }` matching).
+- The `Clip`-targeted `InspectorPanel(video:selectedClipID:onUpdate:)` from v0.6 stays untouched — adding the overload, not replacing.
+
+### Engine notes
+
+- **Speed-curve sampling.** No engine work — `SpeedCurveSampler` already discretizes `Animation<Double>` for export. The editor only authors the value type.
+- **Caption ordering.** kadr's engine accepts cues in any order (`Video.captions(_:)` accumulates). The editor sort is purely a UX choice.
+- **Overlay layer-ID lookup.** Every overlay type already conforms to a layer-ID-bearing protocol; the inspector reuses `OverlayHost`'s existing introspection helpers (`overlay(for:in:)`).
+
+### Tier breakdown
+
+- **Tier 0** *(this PR)* — RFC only. No code.
+- **Tier 1** — `SpeedCurveEditor`. Pure helpers (`keyframeForGesture`, `clampMultiplier`, hit-test math) factored as `nonisolated static` for testability. ~350 LOC + ~25 tests.
+- **Tier 2** — `CaptionEditor`. Validation helpers (`isValidCueRange`, `sortedByStart`) static + pure. ~250 LOC + ~15 tests.
+- **Tier 3** — `OverlayInspector` overload + four `OverlayUpdate` variants + dispatch. ~400 LOC + ~20 tests.
+- **Tier 4** — Release prep + ship as **v0.8.0**.
+
+### Test strategy
+
+- **`SpeedCurveEditor`** — keyframe hit-test math, multiplier clamping, drag-resolution rules (which marker wins when two share a time), `TimingFunction` round-trip via update callback.
+- **`CaptionEditor`** — sort-on-emit, validation flagging out-of-range cues, "set to playhead" math, add-cue default-window logic.
+- **`OverlayInspector`** — overlay-type dispatch, `OverlayUpdate` round-trip per variant, layer-ID lookup defensive against stale IDs (overlay removed but selection still set).
+- **Body smoke** — each surface constructs without crashing under the same patterns as `TimelineViewTests` (every required init-param permutation).
+
+Target test count: ~60 new tests. Suite floor: 188 → ~248.
+
+### Compatibility
+
+- **Pure additive.** All three surfaces are new. The existing `InspectorPanel(video:selectedClipID:)` v0.6 init stays unchanged; `OverlayInspector` is an overload distinguished by `selectedOverlayID:` vs `selectedClipID:`.
+- **Kadr floor.** Stays at **≥ 0.10.0** (the v0.7 floor — no new kadr surface required).
+- **Platform.** iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+.
+
+### Open questions (track in PRs, not blocking RFC merge)
+
+- **Bézier handles vs. discrete keyframes.** The speed-curve editor renders `Animation<Double>` keyframes as discrete points connected by the timing function. A "true" Bézier editor would expose `cubicBezier` control handles directly. Defer — keyframes-with-timing covers the common case.
+- **Caption text styling.** v0.8 ships plain-text cues only. Styled output via `kadr-captions`' `StyledCaption` is reels-studio's import-side concern; the editor doesn't author per-cue colors / positions in this cycle.
+- **Rich overlay animation editing.** `TextAnimation` (typewriter / fade / slide) is enum-driven; the inspector exposes a picker. Authoring a *custom* keyframed text animation is out of scope — `KeyframeEditor` from v0.6 handles per-property animation on regular clips; extending to overlays is a separate v0.8.x patch if real demand surfaces.
+- **Multi-select on overlays.** Single-selection only in v0.8. Multi-select edit (e.g., set opacity on three overlays at once) is a v0.9+ if requested.
