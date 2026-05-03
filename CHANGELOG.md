@@ -4,6 +4,18 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-05-03
+
+Track-lane trim handle rendering — closes the deferral from v0.7.0. Pure additive; the `onTrackTrim` callback contract from v0.7.0 is unchanged.
+
+### Added
+
+- **Track-lane trim handles** — thin grab handles render on the leading and trailing edges of every non-transition Track-lane clip when `onTrackTrim` is non-`nil`. Drag morphs the clip's live width (the slot's reserved width stays fixed so neighbors don't reflow); on release fires `onTrackTrim(trackIndex, clipIndex, leadingTrim, trailingTrim)` with the same `CMTime` delta semantics as the chain `onTrim`. State machinery and trim math are isolated from the chain path — independent in-flight drags don't interfere.
+
+### Notes
+
+- No public API changes. v0.7.0 call sites pick up handle rendering automatically when they pass `onTrackTrim`.
+
 ## [0.7.0] - 2026-05-03
 
 Timeline zoom + editing inside `Track {}` blocks. Long compositions are now usable (pinch to zoom, horizontal scroll), and Track lanes are no longer read-only — drag a clip inside a Track to reorder it.
