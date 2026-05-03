@@ -92,6 +92,12 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 
+## Example app
+
+For a complete reference implementation that wires every KadrUI component into a real iOS editor — preview, multi-lane timeline, inspector panel, keyframe editor, animated text overlays, audio crossfade glyphs — see [`kadr-reels-studio`](https://github.com/SteliyanH/kadr-reels-studio). It's a runnable iOS app (`brew install xcodegen && make project && open ReelsStudio.xcodeproj`) using KadrUI alongside the rest of the kadr ecosystem (kadr core, [kadr-captions](https://github.com/SteliyanH/kadr-captions), [kadr-photos](https://github.com/SteliyanH/kadr-photos)).
+
+The previous `Examples/SimpleViewer/` snippet has been removed in favor of the standalone reels-studio repo.
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.6.0 editor primitives — `InspectorPanel`, `KeyframeEditor`, animated text preview, audio cross-fade glyphs; next: v0.7+ speed-curve UI / caption editor), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
