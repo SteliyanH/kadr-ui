@@ -552,7 +552,7 @@ public struct CaptionEditor: View {
 - `onUpdate` fires on every commit (text-field blur / timestamp edit / +/- tap). Consumer rebuilds `Video` via `video.captions(newCues)`.
 
 ```swift
-// MARK: - Tier 3: OverlayInspector extension
+// MARK: - Tier 3: OverlayInspector extension + overlay keyframe authoring
 
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension InspectorPanel {
@@ -576,11 +576,39 @@ public enum OverlayUpdate: Sendable {
     /// `Watermark` text / corner / opacity.
     case watermark(WatermarkUpdate)
 }
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension KeyframeEditor {
+
+    /// Overlay-targeted variant of `KeyframeEditor`. Same gesture model — tap
+    /// empty row to add at playhead, long-press a marker to remove, drag to
+    /// retime — but rows bind to overlay properties instead of `Clip` properties.
+    /// Property set per overlay kind:
+    /// - `TextOverlay`    → `.position`, `.opacity`
+    /// - `StickerOverlay` → `.position`, `.opacity`, `.scale`
+    /// - `ImageOverlay`   → `.position`, `.opacity`
+    /// - `Watermark`      → `.opacity` (corner-anchored, position not animated)
+    public init(
+        video: Video,
+        selectedOverlayID: Binding<LayerID?>,
+        currentTime: Binding<CMTime>,
+        onAdd: @escaping (LayerID, OverlayProperty, CMTime) -> Void,
+        onRemove: @escaping (LayerID, OverlayProperty, CMTime) -> Void,
+        onRetime: @escaping (LayerID, OverlayProperty, CMTime, CMTime) -> Void
+    )
+}
+
+public enum OverlayProperty: Sendable, Hashable {
+    case position
+    case opacity
+    case scale  // sticker-only; row suppressed for other overlay kinds
+}
 ```
 
 - Overlay-update structs mirror existing kadr Overlay constructor params; consumers route them back into a fresh `Video { ... overlay(...) }` rebuild.
 - Surface picks the inspector body by inspecting the selected layer ID's underlying overlay type (via `Video.overlays.first { $0.layerID == id }` matching).
-- The `Clip`-targeted `InspectorPanel(video:selectedClipID:onUpdate:)` from v0.6 stays untouched — adding the overload, not replacing.
+- The `Clip`-targeted `InspectorPanel(video:selectedClipID:onUpdate:)` and `KeyframeEditor(video:selectedClipID:...)` from v0.6 stay untouched — adding overloads, not replacing.
+- **Why overlay keyframes are in Tier 3 scope (not deferred):** animated text and animated stickers are *the* visual signature of TikTok / IG-style reels. Without authoring, kadr-reels-studio is stuck on the fixed `TextAnimation` enum (typewriter / fade / slide) — fine for the walking skeleton, limiting for a real demo. The v0.6 `KeyframeEditor` already solved the per-property authoring pattern for clips; extending it to overlays is incremental, not novel.
 
 ### Engine notes
 
@@ -593,7 +621,7 @@ public enum OverlayUpdate: Sendable {
 - **Tier 0** *(this PR)* — RFC only. No code.
 - **Tier 1** — `SpeedCurveEditor`. Pure helpers (`keyframeForGesture`, `clampMultiplier`, hit-test math) factored as `nonisolated static` for testability. ~350 LOC + ~25 tests.
 - **Tier 2** — `CaptionEditor`. Validation helpers (`isValidCueRange`, `sortedByStart`) static + pure. ~250 LOC + ~15 tests.
-- **Tier 3** — `OverlayInspector` overload + four `OverlayUpdate` variants + dispatch. ~400 LOC + ~20 tests.
+- **Tier 3** — `OverlayInspector` overload + four `OverlayUpdate` variants + dispatch, plus `KeyframeEditor` overlay overload + `OverlayProperty` row dispatch. ~600 LOC + ~30 tests.
 - **Tier 4** — Release prep + ship as **v0.8.0**.
 
 ### Test strategy
@@ -601,9 +629,10 @@ public enum OverlayUpdate: Sendable {
 - **`SpeedCurveEditor`** — keyframe hit-test math, multiplier clamping, drag-resolution rules (which marker wins when two share a time), `TimingFunction` round-trip via update callback.
 - **`CaptionEditor`** — sort-on-emit, validation flagging out-of-range cues, "set to playhead" math, add-cue default-window logic.
 - **`OverlayInspector`** — overlay-type dispatch, `OverlayUpdate` round-trip per variant, layer-ID lookup defensive against stale IDs (overlay removed but selection still set).
+- **Overlay `KeyframeEditor`** — property-set dispatch per overlay kind (sticker emits `.scale` row, watermark suppresses `.position`), keyframe hit-test parity with v0.6 chain editor, retime monotonicity (drag past adjacent keyframe clamps).
 - **Body smoke** — each surface constructs without crashing under the same patterns as `TimelineViewTests` (every required init-param permutation).
 
-Target test count: ~60 new tests. Suite floor: 188 → ~248.
+Target test count: ~70 new tests. Suite floor: 188 → ~258.
 
 ### Compatibility
 
@@ -615,5 +644,4 @@ Target test count: ~60 new tests. Suite floor: 188 → ~248.
 
 - **Bézier handles vs. discrete keyframes.** The speed-curve editor renders `Animation<Double>` keyframes as discrete points connected by the timing function. A "true" Bézier editor would expose `cubicBezier` control handles directly. Defer — keyframes-with-timing covers the common case.
 - **Caption text styling.** v0.8 ships plain-text cues only. Styled output via `kadr-captions`' `StyledCaption` is reels-studio's import-side concern; the editor doesn't author per-cue colors / positions in this cycle.
-- **Rich overlay animation editing.** `TextAnimation` (typewriter / fade / slide) is enum-driven; the inspector exposes a picker. Authoring a *custom* keyframed text animation is out of scope — `KeyframeEditor` from v0.6 handles per-property animation on regular clips; extending to overlays is a separate v0.8.x patch if real demand surfaces.
 - **Multi-select on overlays.** Single-selection only in v0.8. Multi-select edit (e.g., set opacity on three overlays at once) is a v0.9+ if requested.
