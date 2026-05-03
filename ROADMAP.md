@@ -58,12 +58,16 @@ Bumps Kadr dep floor to **v0.10.0**. Long compositions become usable, and Track 
 - **`onTrackReorder`** + **`applyTrackReorder(track:from:to:)`** — drag-to-reorder inside `Track {}` blocks, preserving `startTime` / `name` / `opacityFactor` and travelling inner `Transition`s with their preceding clip.
 - **`onTrackTrim`** callback contract — same delta semantics as `onTrim`, qualified by `trackIndex`. Trim-handle rendering on Track lanes follows in a v0.7.x patch.
 
-## v0.8.0+ — Speed curve UI / caption editor
+## v0.8.0 — SpeedCurveEditor / CaptionEditor / OverlayInspector ✓ shipped
 
-Depends on **kadr v0.11+**.
+Closes the v0.6 deferral list. Built against the existing kadr ≥ 0.10 surface — no kadr v0.11 needed.
 
-- Speed-curve editor — visual Bézier curve editor on a selected `VideoClip`, drives `VideoClip.speed(curve:)` callback
-- Caption editor — text + timing UI for the `kadr-captions` surface (or kadr core captions if rolled in)
+- **`SpeedCurveEditor`** — log2-scaled 2D keyframe editor authoring `Animation<Double>` for `VideoClip.speed(curve:)`.
+- **`CaptionEditor`** — list-style cue editor over `Video.captions(_:)` with sort-on-emit and playhead-anchored set-start/end shortcuts.
+- **`OverlayInspectorPanel`** — sibling to `InspectorPanel` retargeted at overlays. Common (Position / Anchor / Opacity) plus type-specific (TextOverlay text + animation, StickerOverlay rotation).
+- **`OverlayKeyframeEditor`** — sibling to `KeyframeEditor` retargeted at overlay `.position` / `.size` keyframes.
+
+Custom `TextAnimation`s round-trip as `.custom` so the picker can clear them but not re-author. Bézier control-handle UX, styled caption authoring, and multi-select on overlays remain deferred (real-but-niche).
 
 ## v1.0.0 — Production Ready
 
@@ -94,8 +98,8 @@ Tracks Kadr v1.0.
 | 0.5.0 / 0.5.1 | ≥ 0.6.0 *(uses `Track`, `Clip.startTime`)* |
 | 0.5.2 / 0.5.3 | ≥ 0.7.0 *(uses `Track.name`, `AudioTrack.startTime`, `AudioTrack.explicitDuration`)* |
 | 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
-| 0.7.0 | ≥ 0.10.0 *(uses `Track.opacityFactor`)* |
-| 0.8.x *(planned)* | ≥ 0.11.0 |
+| 0.7.0 / 0.7.1 | ≥ 0.10.0 *(uses `Track.opacityFactor`)* |
+| 0.8.0 | ≥ 0.10.0 |
 | 1.0.0 *(planned)* | ≥ 1.0.0 |
 
 ## Contributing

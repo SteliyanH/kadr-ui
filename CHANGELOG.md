@@ -4,6 +4,31 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-05-03
+
+Three editor surfaces deferred since v0.6, all built against kadr's existing public surface (no kadr v0.11 needed). Closes the demo-critical gaps that were blocking kadr-reels-studio from being a complete editor walkthrough — speed authoring, caption editing, and overlay property + keyframe editing.
+
+### Added
+
+- **`SpeedCurveEditor`** — visual 2D keyframe editor for ``Kadr/VideoClip/speed(curve:)``. Time on the x-axis (clip-relative, anchored to `trimRange.duration`); speed multiplier on a log2-scaled y-axis (`0.25× ... 4×`, `1.0` rendered as a baseline gridline so equal-ratio deltas are equidistant). Tap empty area → add keyframe; drag marker → retime + rescale; long-press → remove. Picker for `TimingFunction` (Linear / Ease In / Ease Out / Ease In Out — Cubic Bézier and Custom intentionally absent, consumers wanting either pass via `clip.speed(curve:)` directly). Optional `currentTime` binding overlays a playhead. Read-only model: `onUpdate: (Animation<Double>?) -> Void` fires on every commit; consumer rebuilds the clip.
+- **`CaptionEditor`** — list-style cue editor for ``Kadr/Video/captions(_:)``. Each row exposes a multi-line text field, start / end timestamps, "→" set-to-playhead shortcuts (when `currentTime` is bound), and a delete button. Cues outside `[0, compositionDuration]` get a red border + warning glyph (not silently dropped). Trailing **+ Add cue** appends a 2-second cue starting at the playhead (or composition midpoint), clamped so the default window stays inside the composition where possible. Sort-on-emit (no in-place reorder); stable for ties.
+- **`OverlayInspectorPanel`** — sibling to v0.6 ``InspectorPanel`` retargeted at overlays. Common rows (Position X/Y, Anchor, Opacity) for every overlay; type-specific rows for ``Kadr/TextOverlay`` (text field + ``Kadr/TextAnimation`` preset picker — None / Fade In / Slide In × 4 directions / Scale Up; consumer-built animations round-trip as `.custom`) and ``Kadr/StickerOverlay`` (rotation slider). ``Kadr/ImageOverlay`` (and ``Kadr/Video/watermark(_:position:size:opacity:)`` instances — same type, just `layerID == "watermark"`) get common-only.
+- **`OverlayKeyframeEditor`** — sibling to v0.6 ``KeyframeEditor`` retargeted at overlays. Property rows for ``Kadr/ImageOverlay`` / ``Kadr/StickerOverlay``: `.position`, `.size`. ``Kadr/TextOverlay`` produces zero rows (kadr's text overlays use the enum-driven ``Kadr/TextAnimation`` instead of `Animation<Position>` / `Animation<Size>`). Composition-relative time mapping (matching kadr's overlay-animation semantics — distinct from the clip-relative `KeyframeEditor`). Same gesture model: tap-to-add at playhead, long-press marker to remove, drag to retime.
+- **`OverlayProperty`** — `.position` / `.size` enum surfaced as ``OverlayKeyframeEditor`` row identifiers.
+- **`OverlayTextAnimationKind`** — picker round-trip enum for the Text-overlay animation surface. `.none` / `.fadeIn` / `.slideIn(direction:)` / `.scaleUp` / `.custom`.
+- Pure helpers exposed `nonisolated public static`: `SpeedCurveEditor.{clampMultiplier, normalizedY, multiplier(forNormalizedY:), point, locationToKeyframe, draggedKeyframe, keyframesByAdding/Removing/Replacing, timingPresets, timingLabel}`; `CaptionEditor.{sortedByStart, isValidCueRange, defaultNewCueStart, cueRange}`; `InspectorPanel.{overlayFor, textAnimationKind, textAnimation(forKind:)}`; `OverlayInspectorPanel.{animationPresets, animationPickerIndex}`; `OverlayKeyframeEditor.{propertyOptions, keyframesForProperty, label}`.
+
+### Tests
+
+- 75 new tests across the cycle: `SpeedCurveEditorTests` (30), `CaptionEditorTests` (18), `OverlayInspectorTests` (27). Suite: 188 → 263.
+
+### Notes
+
+- **Scope decision: RFC said init overloads, ships as sibling types.** RFC #60 promised the overlay surfaces as init overloads on `InspectorPanel` / `KeyframeEditor`. In implementation, splitting bodies between separate View structs is cleaner than stuffing two distinct edit modes into one — the new public types `OverlayInspectorPanel` and `OverlayKeyframeEditor` carry identical callback ergonomics.
+- **Bézier control-handle UX**, **styled caption authoring**, and **multi-select on overlays** stayed deferred (real-but-niche, not on the demo critical path). Custom `TextAnimation`s round-trip safely as `.custom` so consumer-built animations aren't silently lost.
+- **`MagnificationGesture`** is still in use to keep the iOS 16 deployment floor (deprecated on iOS 17+ but functional).
+- Caught and fixed a Swift 6 strict-concurrency SIGTRAP during initial Tier 1 testing — array-filter closures in static helpers needed `nonisolated` annotation. Lesson logged for v1.0 audit.
+
 ## [0.7.1] - 2026-05-03
 
 Track-lane trim handle rendering — closes the deferral from v0.7.0. Pure additive; the `onTrackTrim` callback contract from v0.7.0 is unchanged.
