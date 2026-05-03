@@ -70,10 +70,10 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 Add KadrUI to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", from: "0.6.0"),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", from: "0.7.0"),
 ```
 
-Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively (≥ `0.8.0`).
+Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively (≥ `0.10.0`).
 
 ## Compatibility
 
@@ -89,6 +89,7 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.5.2 | ≥ 0.7.0 *(uses `Track.name`, `AudioTrack.startTime`, `AudioTrack.explicitDuration`)* |
 | 0.5.3 | ≥ 0.7.0 |
 | 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
+| 0.7.0 | ≥ 0.10.0 *(uses `Track.opacityFactor`)* |
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 
@@ -100,7 +101,7 @@ The previous `Examples/SimpleViewer/` snippet has been removed in favor of the s
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.6.0 editor primitives — `InspectorPanel`, `KeyframeEditor`, animated text preview, audio cross-fade glyphs; next: v0.7+ speed-curve UI / caption editor), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.7.0 timeline pinch-zoom + Track-internal reorder; next: speed-curve UI / caption editor / track-lane trim handles), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
 
 ## License
 
