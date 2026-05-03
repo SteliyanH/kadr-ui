@@ -46,12 +46,20 @@ Bumps Kadr dep floor to v0.8.4. Adds the SwiftUI surfaces that turn the timeline
 - **`OverlayHost` animated text preview** — when a `TextOverlay` carries a `textAnimation`, a `UIViewRepresentable` / `NSViewRepresentable` bridge runs the `[CAAnimation]` against a live `CATextLayer` so preview matches export.
 - **TimelineView audio cross-fade glyphs** — two-triangles-meeting markers in audio lanes at every `AudioTrack` overlap with non-zero `crossfadeDuration`.
 
-## v0.7.0+ — Speed curve UI / caption editor
+## v0.7.0 — Timeline zoom + Track-internal reorder ✓ shipped
 
-Depends on **kadr v0.9.0**.
+Bumps Kadr dep floor to **v0.10.0**. Long compositions become usable, and Track lanes are no longer read-only.
+
+- **`TimelineZoom`** value type + `TimelineView(zoom:)` — pinch-to-zoom and horizontal scroll over an explicit pixels-per-second density (clamped `8…400`). Without `zoom`, layout is pixel-identical to v0.4–v0.6.
+- **`onTrackReorder`** + **`applyTrackReorder(track:from:to:)`** — drag-to-reorder inside `Track {}` blocks, preserving `startTime` / `name` / `opacityFactor` and travelling inner `Transition`s with their preceding clip.
+- **`onTrackTrim`** callback contract — same delta semantics as `onTrim`, qualified by `trackIndex`. Trim-handle rendering on Track lanes follows in a v0.7.x patch.
+
+## v0.8.0+ — Speed curve UI / caption editor
+
+Depends on **kadr v0.11+**.
 
 - Speed-curve editor — visual Bézier curve editor on a selected `VideoClip`, drives `VideoClip.speed(curve:)` callback
-- Caption editor — text + timing UI for the `kadr-captions` surface (or kadr v0.9's caption types if rolled into core)
+- Caption editor — text + timing UI for the `kadr-captions` surface (or kadr core captions if rolled in)
 
 ## v1.0.0 — Production Ready
 
@@ -67,9 +75,9 @@ Tracks Kadr v1.0.
 ## Explicit non-goals
 
 - **Cross-lane drag** (move a clip from chain → Track or between Tracks) — UX-heavy and the use cases are app-specific. Consumers wire their own Track-creation flow.
-- **Editing inside `Track {}` blocks** — reorder/trim on Track-internal clips is staged for v0.6.x at earliest; needs the kadr v0.8 Transform surface to feel right.
+- **Cross-lane drag** between Tracks (move a clip from one Track to another) — Track-internal reorder shipped in v0.7.0; cross-Track moves remain UX-heavy and app-specific.
 - **Custom waveform colors / shapes** — fixed white-on-block render in v0.5.3. Exposing styling waits for community demand.
-- **Zoom + horizontal scroll on TimelineView** — practical for long compositions but adds enough state machinery (visible time range, virtualized clip blocks) that it's better as its own milestone.
+- **Virtualized clip rendering at high zoom levels** — v0.7.0 ships zoom + ScrollView with full clip rendering; virtualization for very large compositions waits for community demand.
 
 ---
 
@@ -82,7 +90,8 @@ Tracks Kadr v1.0.
 | 0.5.0 / 0.5.1 | ≥ 0.6.0 *(uses `Track`, `Clip.startTime`)* |
 | 0.5.2 / 0.5.3 | ≥ 0.7.0 *(uses `Track.name`, `AudioTrack.startTime`, `AudioTrack.explicitDuration`)* |
 | 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
-| 0.7.x *(planned)* | ≥ 0.9.0 |
+| 0.7.0 | ≥ 0.10.0 *(uses `Track.opacityFactor`)* |
+| 0.8.x *(planned)* | ≥ 0.11.0 |
 | 1.0.0 *(planned)* | ≥ 1.0.0 |
 
 ## Contributing
