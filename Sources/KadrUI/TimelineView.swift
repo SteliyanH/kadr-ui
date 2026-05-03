@@ -144,9 +144,9 @@ public struct TimelineView: View {
     ///     Added in v0.7.
     ///   - onTrackTrim: Optional callback for trim drags on a Track-lane clip. Same
     ///     delta semantics as ``onTrim``, with an extra `trackIndex` qualifier
-    ///     identifying which Track the clip lives in. The callback contract is
-    ///     stable in v0.7; trim-handle rendering on Track lanes follows in a v0.7.x
-    ///     point release.
+    ///     identifying which Track the clip lives in. When non-`nil`, thin grab
+    ///     handles render on the leading and trailing edges of every non-transition
+    ///     Track-lane block (added in v0.7.1).
     public init(
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
@@ -460,9 +460,10 @@ public struct TimelineView: View {
     }
 
     /// Editable Track-lane item block. Mirrors ``laneItemBlock`` visually but adds
-    /// a drag-to-reorder gesture (when ``onTrackReorder`` is set) and tap-to-select.
-    /// Inner ``Kadr/Transition``s render as transition glyphs and don't host their
-    /// own drag — they travel with the preceding clip via ``applyTrackReorder``.
+    /// a drag-to-reorder gesture (when ``onTrackReorder`` is set), trim handles on
+    /// leading / trailing edges (when ``onTrackTrim`` is set), and tap-to-select.
+    /// Inner ``Kadr/Transition``s render statically and don't host their own
+    /// drag — they travel with the preceding clip via ``applyTrackReorder``.
     @ViewBuilder
     private func trackItemBlock(
         trackIndex: Int,
@@ -475,24 +476,44 @@ public struct TimelineView: View {
         let w = max(0, CMTimeGetSeconds(item.duration) * pxPerSecond)
         let key = TrackDragKey(trackIndex: trackIndex, clipIndex: clipIndex)
         let isDragging = draggingTrackInfo == key
+        let isTrimming = trimmingTrackInfo == key
         let dragOffsetX = isDragging ? trackDragOffset : 0
+        let (liveWidth, liveTrimOffset) = trackLiveTrimMetrics(for: key, baseWidth: w)
         let isSelected = selectedClipID != nil && item.clipID != nil && selectedClipID?.wrappedValue == item.clipID
+        let canTrim = item.kind != .transition && onTrackTrim != nil
 
-        let block = RoundedRectangle(cornerRadius: 4)
+        let inner = RoundedRectangle(cornerRadius: 4)
             .fill(laneItemColor(item.kind))
-            .frame(width: w, height: laneHeight)
+            .frame(width: max(0, liveWidth), height: laneHeight)
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
             )
+            .overlay(alignment: .leading) {
+                if canTrim {
+                    trackTrimHandle(key: key, edge: .leading, pxPerSecond: pxPerSecond)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if canTrim {
+                    trackTrimHandle(key: key, edge: .trailing, pxPerSecond: pxPerSecond)
+                }
+            }
             .scaleEffect(isDragging ? 1.05 : 1.0)
             .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
+            .offset(x: liveTrimOffset)
+
+        // Outer slot keeps reserved width fixed (so neighbors don't reflow during
+        // a trim drag); the colored inner block morphs to `liveWidth + liveTrimOffset`.
+        let block = inner
+            .frame(width: max(0, w), height: laneHeight, alignment: .topLeading)
             .offset(x: baseX + dragOffsetX)
-            .zIndex(isDragging ? 1 : 0)
+            .zIndex(isDragging || isTrimming ? 1 : 0)
             .contentShape(Rectangle())
 
-        // Transitions don't host their own gesture — they travel with the preceding
-        // clip in `applyTrackReorder`. Tap-to-select still works on identified clips.
+        // Transitions don't host their own reorder gesture — they travel with the
+        // preceding clip in `applyTrackReorder`. Tap-to-select still works on
+        // identified clips.
         let canDrag = item.kind != .transition && onTrackReorder != nil
         let withGesture = block.modifier(
             OptionalGestureModifier(
@@ -513,6 +534,51 @@ public struct TimelineView: View {
         } else {
             withGesture
         }
+    }
+
+    /// Live-width and leading-offset for a Track-lane clip during a trim drag. Reuses
+    /// the same pure helper the chain path uses, so morph semantics match.
+    private func trackLiveTrimMetrics(for key: TrackDragKey, baseWidth: CGFloat) -> (width: CGFloat, offset: CGFloat) {
+        guard trimmingTrackInfo == key, let edge = trimmingTrackEdge else {
+            return (baseWidth, 0)
+        }
+        return TimelineView.liveTrimMetrics(edge: edge, baseWidth: baseWidth, pixelDelta: trimmingTrackPixelDelta)
+    }
+
+    @ViewBuilder
+    private func trackTrimHandle(key: TrackDragKey, edge: TrimEdge, pxPerSecond: Double) -> some View {
+        let isActive = trimmingTrackInfo == key && trimmingTrackEdge == edge
+        Rectangle()
+            .fill(isActive ? Color.white : Color.white.opacity(0.5))
+            .frame(width: 4)
+            .contentShape(Rectangle().inset(by: -6))   // wider hit target than visual
+            .gesture(trackTrimGesture(key: key, edge: edge, pxPerSecond: pxPerSecond))
+    }
+
+    private func trackTrimGesture(key: TrackDragKey, edge: TrimEdge, pxPerSecond: Double) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                if onTrackTrim == nil { return }
+                if trimmingTrackInfo == nil {
+                    trimmingTrackInfo = key
+                    trimmingTrackEdge = edge
+                }
+                trimmingTrackPixelDelta = value.translation.width
+            }
+            .onEnded { value in
+                defer {
+                    trimmingTrackInfo = nil
+                    trimmingTrackEdge = nil
+                    trimmingTrackPixelDelta = 0
+                }
+                guard onTrackTrim != nil, pxPerSecond > 0 else { return }
+                let (leading, trailing) = TimelineView.computeTrimDeltas(
+                    edge: edge,
+                    pixelDelta: value.translation.width,
+                    pxPerSecond: pxPerSecond
+                )
+                onTrackTrim?(key.trackIndex, key.clipIndex, leading, trailing)
+            }
     }
 
     private struct OptionalGestureModifier<G: Gesture>: ViewModifier {
