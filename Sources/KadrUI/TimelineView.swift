@@ -44,6 +44,7 @@ public struct TimelineView: View {
     private let video: Video
     private let currentTime: Binding<CMTime>?
     private let selectedClipID: Binding<ClipID?>?
+    private let zoom: Binding<TimelineZoom>?
     private let laneHeight: CGFloat
     private let laneSpacing: CGFloat
     private let showAudioLanes: Bool
@@ -51,6 +52,11 @@ public struct TimelineView: View {
     private let showLaneLabels: Bool
     private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
     private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
+
+    /// In-flight pinch baseline. `nil` outside the gesture; captures the
+    /// pre-gesture density on first `onChanged` so subsequent updates multiply
+    /// from a stable base instead of compounding.
+    @State private var pinchBaseline: Double?
 
     /// Resolved durations for clips whose `Clip.duration` is synchronously `.zero`
     /// (currently only untrimmed `VideoClip`s). Keyed by index in `video.clips`.
@@ -114,6 +120,7 @@ public struct TimelineView: View {
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
         selectedClipID: Binding<ClipID?>? = nil,
+        zoom: Binding<TimelineZoom>? = nil,
         laneHeight: CGFloat = 40,
         laneSpacing: CGFloat = 4,
         showAudioLanes: Bool = true,
@@ -125,6 +132,7 @@ public struct TimelineView: View {
         self.video = video
         self.currentTime = currentTime
         self.selectedClipID = selectedClipID
+        self.zoom = zoom
         self.laneHeight = laneHeight
         self.laneSpacing = laneSpacing
         self.showAudioLanes = showAudioLanes
@@ -137,35 +145,26 @@ public struct TimelineView: View {
     public var body: some View {
         GeometryReader { geometry in
             let totalSeconds = compositionDuration()
-            let pxPerSecond = totalSeconds > 0 ? geometry.size.width / totalSeconds : 0
+            // v0.7: when zoom is bound, derive pxPerSecond from the binding;
+            // otherwise stick with the v0.4–v0.6 fit-to-width math.
+            let pxPerSecond: Double = {
+                if let zoom = zoom?.wrappedValue {
+                    return zoom.pixelsPerSecond
+                }
+                return totalSeconds > 0 ? Double(geometry.size.width) / totalSeconds : 0
+            }()
             let lanes = TimelineView.assignLanes(for: video, includeAudio: showAudioLanes)
-            // Branch on non-audio lane count: a chain-only Video (with or without audio
-            // tracks) takes the v0.4.x render path, where audio is rendered inline at
-            // the bottom of the strip. Genuine multi-track compositions take the
-            // multi-lane path, where audio renders as additional lanes.
             let nonAudioLaneCount = lanes.reduce(into: 0) { acc, lane in
                 if case .audio = lane.0 {} else { acc += 1 }
             }
 
-            ZStack(alignment: .topLeading) {
-                if nonAudioLaneCount <= 1 {
-                    // Chain-only short-circuit — pixel-identical to v0.4.x.
-                    clipStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
-                } else {
-                    multiLaneStrip(
-                        lanes: lanes,
-                        pxPerSecond: pxPerSecond,
-                        totalSeconds: totalSeconds
-                    )
-                }
-                if let currentTime, totalSeconds > 0 {
-                    playhead(
-                        at: CMTimeGetSeconds(currentTime.wrappedValue),
-                        pxPerSecond: pxPerSecond,
-                        height: geometry.size.height
-                    )
-                }
-            }
+            laneContent(
+                lanes: lanes,
+                pxPerSecond: pxPerSecond,
+                totalSeconds: totalSeconds,
+                nonAudioLaneCount: nonAudioLaneCount,
+                viewportSize: geometry.size
+            )
         }
         .task {
             await resolveDurations()
@@ -173,6 +172,73 @@ public struct TimelineView: View {
         .task(id: waveformLoadKey) {
             await loadWaveformsIfNeeded()
         }
+    }
+
+    /// Renders the lane stack. When `zoom` is non-nil the content is wrapped in a
+    /// horizontal `ScrollView` and a `MagnifyGesture` mutates the bound zoom; when
+    /// `zoom` is nil the layout fills the geometry width pixel-identically to
+    /// v0.4–v0.6.
+    @ViewBuilder
+    private func laneContent(
+        lanes: [(LaneKind, [LaneItem])],
+        pxPerSecond: Double,
+        totalSeconds: Double,
+        nonAudioLaneCount: Int,
+        viewportSize: CGSize
+    ) -> some View {
+        let totalWidth = max(viewportSize.width, CGFloat(totalSeconds * pxPerSecond))
+        let stack = ZStack(alignment: .topLeading) {
+            if nonAudioLaneCount <= 1 {
+                clipStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+            } else {
+                multiLaneStrip(
+                    lanes: lanes,
+                    pxPerSecond: pxPerSecond,
+                    totalSeconds: totalSeconds
+                )
+            }
+            if let currentTime, totalSeconds > 0 {
+                playhead(
+                    at: CMTimeGetSeconds(currentTime.wrappedValue),
+                    pxPerSecond: pxPerSecond,
+                    height: viewportSize.height
+                )
+            }
+        }
+        .frame(width: totalWidth, alignment: .topLeading)
+
+        if zoom != nil {
+            ScrollView(.horizontal, showsIndicators: false) {
+                stack
+            }
+            .gesture(zoomGesture(totalSeconds: totalSeconds))
+        } else {
+            stack
+        }
+    }
+
+    /// Pinch-to-zoom that mutates the bound `TimelineZoom`. Captures the
+    /// pre-gesture density on first `onChanged` so subsequent updates multiply
+    /// from a stable base; clears on `onEnded`. Uses `MagnificationGesture` for
+    /// iOS 16 / macOS 13 deployment-floor compatibility (the iOS-17
+    /// `MagnifyGesture` raises the floor).
+    private func zoomGesture(totalSeconds: Double) -> some Gesture {
+        MagnificationGesture(minimumScaleDelta: 0.01)
+            .onChanged { magnification in
+                guard let binding = zoom else { return }
+                let baseline: Double
+                if let captured = pinchBaseline {
+                    baseline = captured
+                } else {
+                    baseline = binding.wrappedValue.pixelsPerSecond
+                    pinchBaseline = baseline
+                }
+                let scaled = baseline * Double(magnification)
+                binding.wrappedValue.pixelsPerSecond = TimelineZoom.clamp(scaled)
+            }
+            .onEnded { _ in
+                pinchBaseline = nil
+            }
     }
 
     /// Identity for `.task(id:)` driving waveform loading — re-fires when the audio
