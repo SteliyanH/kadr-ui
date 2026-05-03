@@ -166,6 +166,29 @@ struct TimelineViewTests {
         _ = TimelineView(video, onReorder: { _, _, _ in }).body
     }
 
+    @Test @MainActor func constructsWithTrackReorderCallback() {
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 5.0).id("main")
+            Track(at: 1.0, name: "B-roll") {
+                ImageClip(img, duration: 1.0).id("a")
+                ImageClip(img, duration: 2.0).id("b")
+            }
+        }
+        _ = TimelineView(video, onTrackReorder: { _, _, _, _ in }).body
+    }
+
+    @Test @MainActor func constructsWithTrackTrimCallback() {
+        let img = PlatformImage()
+        let video = Video {
+            ImageClip(img, duration: 5.0).id("main")
+            Track(at: 1.0) {
+                ImageClip(img, duration: 1.0).id("a")
+            }
+        }
+        _ = TimelineView(video, onTrackTrim: { _, _, _, _ in }).body
+    }
+
     // MARK: - Reorder math: computeTargetIndex
 
     @Test func computeTargetIndexNoMovementReturnsSource() {
