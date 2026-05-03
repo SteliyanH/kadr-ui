@@ -4,6 +4,30 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-05-03
+
+Timeline zoom + editing inside `Track {}` blocks. Long compositions are now usable (pinch to zoom, horizontal scroll), and Track lanes are no longer read-only — drag a clip inside a Track to reorder it.
+
+Bumps the Kadr dep floor to **0.10.0** (uses `Track.opacityFactor` to preserve per-track opacity through reorder).
+
+### Added
+
+- **`TimelineZoom`** value type — explicit pixels-per-second density with clamped bounds (`8…400`). Helpers: `init(pixelsPerSecond:)` (clamps), `fitToWidth(_:totalSeconds:)` (defensive against zero / out-of-range), `zoomed(by:)`, `clamp(_:)`. `Sendable + Equatable`.
+- **`TimelineView(zoom:)`** init param — when bound, `pxPerSecond` is sourced from the binding and content is wrapped in a horizontal `ScrollView`. A `MagnificationGesture` (iOS 16 / macOS 13 floor) writes the zoom back; the gesture captures a pre-pinch baseline on first `onChanged` so updates multiply from a stable base instead of compounding. Without `zoom`, layout is pixel-identical to v0.4–v0.6.
+- **`TimelineView.applyTrackReorder(track:from:to:)`** pure helper — rebuilds a `Kadr.Track` with reordered inner clips while preserving `startTime`, `name`, and `opacityFactor`. Inner `Transition`s travel with their preceding clip — same rule as the implicit chain.
+- **`onTrackReorder(trackIndex:from:to:newClips:)`** callback on `TimelineView` — wires drag-to-reorder gestures on Track lane items. Emits the full rebuilt `video.clips` so consumers reconstruct `Video {}` directly.
+- **`onTrackTrim(trackIndex:clipIndex:leadingTrim:trailingTrim:)`** callback on `TimelineView` — same delta semantics as `onTrim`, qualified by `trackIndex`. Callback contract is stable in v0.7; trim-handle rendering on Track lanes follows in a v0.7.x point release.
+
+### Tests
+
+- 24 new tests across the cycle: `TimelineZoomTests` (16) — clamping, fit-to-width math, equality, body smoke; `TimelineLanesTests` extensions (6) — `applyTrackReorder` reorder + invariants; `TimelineViewTests` extensions (2) — track-callback smoke. Suite: 164 → 188.
+
+### Notes
+
+- Track-lane editing surface ships in two stages — reorder lands in 0.7.0; track-lane trim handles arrive in a 0.7.x patch alongside the already-shipped `onTrackTrim` contract (no API churn at the consumer).
+- `MagnificationGesture` is deprecated on iOS 17+ in favor of `MagnifyGesture`, but switching would raise the deployment floor; keeping the iOS 16 floor is the higher-priority constraint.
+- Speed-curve UI and caption editor remain deferred (gated on Kadr v0.11 surface area).
+
 ## [0.6.0] - 2026-04-29
 
 Editor primitives. KadrUI catches up to Kadr 0.8 (Transform / Animation / animated `TextOverlay`) and ships the SwiftUI surfaces that turn the timeline into a real editor: a per-clip property panel, a per-property keyframe track, an animated text preview path that matches export, and audio cross-fade indicators on the timeline.
