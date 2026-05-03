@@ -52,6 +52,8 @@ public struct TimelineView: View {
     private let showLaneLabels: Bool
     private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
     private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
+    private let onTrackReorder: ((_ trackIndex: Int, _ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
+    private let onTrackTrim: ((_ trackIndex: Int, _ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
 
     /// In-flight pinch baseline. `nil` outside the gesture; captures the
     /// pre-gesture density on first `onChanged` so subsequent updates multiply
@@ -66,6 +68,22 @@ public struct TimelineView: View {
     @State private var draggingIndex: Int?
     /// Horizontal pixel offset of the dragged clip from its resting position.
     @State private var dragOffset: CGFloat = 0
+
+    /// Identity of the in-flight Track-lane reorder drag, if any. `trackIndex` is
+    /// the lane's Track-only index (matching `LaneKind.track(index:...)`); `clipIndex`
+    /// is the clip position within that Track's `clips` array.
+    @State private var draggingTrackInfo: TrackDragKey?
+    @State private var trackDragOffset: CGFloat = 0
+
+    /// Identity of the in-flight Track-lane trim drag, if any.
+    @State private var trimmingTrackInfo: TrackDragKey?
+    @State private var trimmingTrackEdge: TrimEdge?
+    @State private var trimmingTrackPixelDelta: CGFloat = 0
+
+    internal struct TrackDragKey: Equatable {
+        let trackIndex: Int
+        let clipIndex: Int
+    }
 
     /// Index of the clip whose trim handle is currently being dragged, if any.
     @State private var trimmingIndex: Int?
@@ -116,6 +134,19 @@ public struct TimelineView: View {
     ///     normally moves, since they have no source-asset front to retrieve). When
     ///     `onTrim` is non-`nil`, thin grab handles render on the leading and trailing
     ///     edges of every media-clip block.
+    ///   - onTrackReorder: Optional callback fired when the user drags a clip *inside*
+    ///     a ``Kadr/Track`` block to a new position within that track. Receives the
+    ///     Track-only ordinal `trackIndex`, the source/target positions inside
+    ///     `track.clips`, and the **new full `video.clips` array** with the rebuilt
+    ///     `Track` substituted in place. Inner ``Kadr/Transition``s travel with their
+    ///     preceding clip — same rule as the implicit chain. The Track's `startTime`,
+    ///     `name`, and `opacityFactor` are preserved by ``TimelineView/applyTrackReorder(track:from:to:)``.
+    ///     Added in v0.7.
+    ///   - onTrackTrim: Optional callback for trim drags on a Track-lane clip. Same
+    ///     delta semantics as ``onTrim``, with an extra `trackIndex` qualifier
+    ///     identifying which Track the clip lives in. The callback contract is
+    ///     stable in v0.7; trim-handle rendering on Track lanes follows in a v0.7.x
+    ///     point release.
     public init(
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
@@ -127,7 +158,9 @@ public struct TimelineView: View {
         showAudioWaveforms: Bool = false,
         showLaneLabels: Bool = false,
         onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
-        onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
+        onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil,
+        onTrackReorder: ((_ trackIndex: Int, _ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
+        onTrackTrim: ((_ trackIndex: Int, _ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
     ) {
         self.video = video
         self.currentTime = currentTime
@@ -140,6 +173,8 @@ public struct TimelineView: View {
         self.showLaneLabels = showLaneLabels
         self.onReorder = onReorder
         self.onTrim = onTrim
+        self.onTrackReorder = onTrackReorder
+        self.onTrackTrim = onTrackTrim
     }
 
     public var body: some View {
@@ -343,7 +378,18 @@ public struct TimelineView: View {
                     guard showAudioWaveforms, item.kind == .audio, let url = audioURL else { return nil }
                     return audioWaveforms[url]
                 }()
-                laneItemBlock(item: item, pxPerSecond: pxPerSecond, waveform: waveform)
+                if case let .track(trackIndex, _, _) = lane.0,
+                   onTrackReorder != nil || onTrackTrim != nil {
+                    trackItemBlock(
+                        trackIndex: trackIndex,
+                        clipIndex: i,
+                        item: item,
+                        items: lane.1,
+                        pxPerSecond: pxPerSecond
+                    )
+                } else {
+                    laneItemBlock(item: item, pxPerSecond: pxPerSecond, waveform: waveform)
+                }
             }
             if case .audio = lane.0 {
                 ForEach(TimelineView.crossfadeBoundaries(in: video), id: \.value) { boundary in
@@ -411,6 +457,146 @@ public struct TimelineView: View {
         } else {
             view
         }
+    }
+
+    /// Editable Track-lane item block. Mirrors ``laneItemBlock`` visually but adds
+    /// a drag-to-reorder gesture (when ``onTrackReorder`` is set) and tap-to-select.
+    /// Inner ``Kadr/Transition``s render as transition glyphs and don't host their
+    /// own drag — they travel with the preceding clip via ``applyTrackReorder``.
+    @ViewBuilder
+    private func trackItemBlock(
+        trackIndex: Int,
+        clipIndex: Int,
+        item: LaneItem,
+        items: [LaneItem],
+        pxPerSecond: Double
+    ) -> some View {
+        let baseX = max(0, CMTimeGetSeconds(item.startTime) * pxPerSecond)
+        let w = max(0, CMTimeGetSeconds(item.duration) * pxPerSecond)
+        let key = TrackDragKey(trackIndex: trackIndex, clipIndex: clipIndex)
+        let isDragging = draggingTrackInfo == key
+        let dragOffsetX = isDragging ? trackDragOffset : 0
+        let isSelected = selectedClipID != nil && item.clipID != nil && selectedClipID?.wrappedValue == item.clipID
+
+        let block = RoundedRectangle(cornerRadius: 4)
+            .fill(laneItemColor(item.kind))
+            .frame(width: w, height: laneHeight)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
+            )
+            .scaleEffect(isDragging ? 1.05 : 1.0)
+            .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
+            .offset(x: baseX + dragOffsetX)
+            .zIndex(isDragging ? 1 : 0)
+            .contentShape(Rectangle())
+
+        // Transitions don't host their own gesture — they travel with the preceding
+        // clip in `applyTrackReorder`. Tap-to-select still works on identified clips.
+        let canDrag = item.kind != .transition && onTrackReorder != nil
+        let withGesture = block.modifier(
+            OptionalGestureModifier(
+                gesture: canDrag
+                    ? trackReorderGesture(
+                        trackIndex: trackIndex,
+                        clipIndex: clipIndex,
+                        items: items,
+                        pxPerSecond: pxPerSecond
+                      )
+                    : nil
+            )
+        )
+        if let id = item.clipID, let binding = selectedClipID {
+            withGesture.onTapGesture {
+                binding.wrappedValue = (binding.wrappedValue == id) ? nil : id
+            }
+        } else {
+            withGesture
+        }
+    }
+
+    private struct OptionalGestureModifier<G: Gesture>: ViewModifier {
+        let gesture: G?
+        func body(content: Content) -> some View {
+            if let gesture {
+                content.gesture(gesture)
+            } else {
+                content
+            }
+        }
+    }
+
+    /// Drag-to-reorder gesture for a Track-lane clip. On release, computes the new
+    /// position via ``computeTargetIndex(source:dragX:slotWidths:)`` over the
+    /// Track's inner clip slot widths, rebuilds the Track via ``applyTrackReorder``,
+    /// and fires ``onTrackReorder`` with the substituted full ``Video/clips`` array.
+    private func trackReorderGesture(
+        trackIndex: Int,
+        clipIndex: Int,
+        items: [LaneItem],
+        pxPerSecond: Double
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                if onTrackReorder == nil { return }
+                if draggingTrackInfo == nil {
+                    draggingTrackInfo = TrackDragKey(trackIndex: trackIndex, clipIndex: clipIndex)
+                }
+                trackDragOffset = value.translation.width
+            }
+            .onEnded { value in
+                defer {
+                    draggingTrackInfo = nil
+                    trackDragOffset = 0
+                }
+                guard onTrackReorder != nil else { return }
+                let widths: [CGFloat] = items.map {
+                    CGFloat(CMTimeGetSeconds($0.duration) * pxPerSecond)
+                }
+                let target = TimelineView.computeTargetIndex(
+                    source: clipIndex,
+                    dragX: value.translation.width,
+                    slotWidths: widths
+                )
+                handleTrackReorder(trackIndex: trackIndex, from: clipIndex, to: target)
+            }
+    }
+
+    /// Apply a Track-lane reorder: rebuild the Track via ``applyTrackReorder`` and
+    /// substitute it back into a fresh `video.clips` array, then fire the callback.
+    private func handleTrackReorder(trackIndex: Int, from sourceIndex: Int, to rawTarget: Int) {
+        let originalIdx = originalIndexForTrack(trackIndex: trackIndex)
+        guard let originalIdx,
+              let track = video.clips[originalIdx] as? Track,
+              let rebuilt = TimelineView.applyTrackReorder(
+                track: track,
+                from: sourceIndex,
+                to: rawTarget
+              )
+        else { return }
+        var newClips = Array(video.clips)
+        newClips[originalIdx] = rebuilt
+        // Translate the chain-result-style targetIndex back. `applyTrackReorder`
+        // delegates to `applyReorder`, so the source media clip lands at the same
+        // post-insertion position the chain helper would compute.
+        guard let result = TimelineView.applyReorder(
+            clips: track.clips,
+            from: sourceIndex,
+            to: rawTarget
+        ) else { return }
+        onTrackReorder?(trackIndex, sourceIndex, result.targetIndex, newClips)
+    }
+
+    /// Original index in `video.clips` of the Track at Track-only ordinal `trackIndex`.
+    private func originalIndexForTrack(trackIndex: Int) -> Int? {
+        var seen = 0
+        for (i, clip) in video.clips.enumerated() {
+            if clip is Track {
+                if seen == trackIndex { return i }
+                seen += 1
+            }
+        }
+        return nil
     }
 
     private func laneItemColor(_ kind: ItemKind) -> Color {

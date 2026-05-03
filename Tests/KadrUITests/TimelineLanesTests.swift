@@ -445,6 +445,88 @@ struct TimelineLanesTests {
         #expect(merged[4].clipID == ClipID("c"))
     }
 
+    // MARK: - applyTrackReorder (v0.7)
+
+    @Test func applyTrackReorderReordersInnerClips() {
+        let img = PlatformImage()
+        let track = Track(at: 1.0, name: "B-roll") {
+            ImageClip(img, duration: 1.0).id("a")
+            ImageClip(img, duration: 2.0).id("b")
+            ImageClip(img, duration: 3.0).id("c")
+        }
+        // Move "a" → end (pos 0 → 2). New order: b, c, a.
+        let result = TimelineView.applyTrackReorder(track: track, from: 0, to: 2)
+        #expect(result != nil)
+        #expect(result?.clips.count == 3)
+        #expect(result?.clips[0].clipID == ClipID("b"))
+        #expect(result?.clips[1].clipID == ClipID("c"))
+        #expect(result?.clips[2].clipID == ClipID("a"))
+    }
+
+    @Test func applyTrackReorderPreservesStartTimeAndName() {
+        let img = PlatformImage()
+        let track = Track(at: 2.5, name: "Cutaways") {
+            ImageClip(img, duration: 1.0).id("a")
+            ImageClip(img, duration: 2.0).id("b")
+        }
+        let result = TimelineView.applyTrackReorder(track: track, from: 0, to: 1)
+        #expect(result != nil)
+        #expect(result?.startTime == CMTime(seconds: 2.5, preferredTimescale: 600))
+        #expect(result?.name == "Cutaways")
+    }
+
+    @Test func applyTrackReorderPreservesOpacityFactor() {
+        let img = PlatformImage()
+        let track = Track(at: 0.0) {
+            ImageClip(img, duration: 1.0).id("a")
+            ImageClip(img, duration: 2.0).id("b")
+        }
+        .opacity(0.5)
+        let result = TimelineView.applyTrackReorder(track: track, from: 0, to: 1)
+        #expect(result != nil)
+        #expect(result?.opacityFactor == 0.5)
+    }
+
+    @Test func applyTrackReorderNoOpReturnsNil() {
+        let img = PlatformImage()
+        let track = Track {
+            ImageClip(img, duration: 1.0).id("a")
+            ImageClip(img, duration: 2.0).id("b")
+        }
+        // Drop on self.
+        let result = TimelineView.applyTrackReorder(track: track, from: 0, to: 0)
+        #expect(result == nil)
+    }
+
+    @Test func applyTrackReorderTransitionTravelsWithSource() {
+        let img = PlatformImage()
+        let track = Track(at: 0.0) {
+            ImageClip(img, duration: 1.0).id("a")
+            Transition.fade(duration: 0.3)
+            ImageClip(img, duration: 2.0).id("b")
+            ImageClip(img, duration: 3.0).id("c")
+        }
+        // Move "a" group (with its trailing fade) to position 2 (after "b").
+        // New order: b, a, fade, c.
+        let result = TimelineView.applyTrackReorder(track: track, from: 0, to: 2)
+        #expect(result != nil)
+        #expect(result?.clips.count == 4)
+        #expect(result?.clips[0].clipID == ClipID("b"))
+        #expect(result?.clips[1].clipID == ClipID("a"))
+        #expect(result?.clips[2] is Kadr.Transition)
+        #expect(result?.clips[3].clipID == ClipID("c"))
+    }
+
+    @Test func applyTrackReorderOutOfRangeSourceReturnsNil() {
+        let img = PlatformImage()
+        let track = Track {
+            ImageClip(img, duration: 1.0).id("a")
+        }
+        // Single-clip track, dropping on self → nil per applyReorder semantics.
+        let result = TimelineView.applyTrackReorder(track: track, from: 0, to: 0)
+        #expect(result == nil)
+    }
+
     // MARK: - End-to-end multi-track integration
 
     @Test func endToEndMultiTrackVideoMatchesExpectation() {
