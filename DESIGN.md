@@ -340,3 +340,153 @@ Target coverage: ~25 new tests across the cycle. Suite floor: 119.
 - **Inspector layout direction** — vertical sliders stacked, or horizontal slider rows? Currently leaning **horizontal rows** (label on left, slider in middle, value on right) to match iOS settings-screen conventions. Revisit in tier 1.
 - **KeyframeEditor zoom-to-fit** — should the editor's time axis match the parent `TimelineView`'s zoom level (when zoom ships in v0.6.x), or always show the selected clip's full lifetime? Defer to when zoom lands.
 - **Crossfade glyph style** — triangle / hourglass / X-mark / custom shape. Triangle pointing along the timeline is the lowest-friction default; revisit if anyone asks.
+
+## v0.7 — Timeline zoom + editing inside Tracks
+
+The two highest-leverage `TimelineView` gaps. Without zoom, long compositions are unworkable; without Track-internal editing, multi-track timelines are partially read-only. Both surfaced as soreness while building reels-studio's editor against v0.6.
+
+### Problem
+
+1. **No zoom.** v0.4.1 fixed the timeline width to `geometry.size.width`. A 5-minute composition at 360 px wide gives ~1.2 px per second — clip blocks are unselectable, transitions invisible. CapCut / Final Cut / iMovie all let users pinch-zoom the timeline; consumers reimplementing this on top of `TimelineView` is a lot of work.
+2. **Tracks are read-only.** `TimelineView`'s `onReorder` / `onTrim` callbacks operate on `video.clips` — i.e. the implicit chain. Clips inside a `Track {}` block render but can't be reordered or trimmed. v0.5's RFC explicitly deferred this; reels-studio hits it the moment a user tries to edit a B-roll track.
+
+### Scope lock
+
+In scope:
+- **Pinch-to-zoom on `TimelineView`.** New init parameter `zoom: Binding<TimelineZoom>?` (optional); when bound, magnification gesture mutates the zoom. Default behavior unchanged when binding is `nil`.
+- **`TimelineZoom` value type.** `pixelsPerSecond: Double` + helpers (`.fitToWidth(_:)`, `.zoomed(by:)`). Floor / ceiling clamps to keep clip blocks at usable sizes (`8 px/s` floor, `400 px/s` ceiling).
+- **Horizontal scrolling.** When zoomed timeline's natural width exceeds `geometry.size.width`, content scrolls inside an internal `ScrollView`. Selection / drag gestures keep working on the scrolled content.
+- **`TimelineView.onTrackReorder` callback.** `(trackIndex: Int, from: Int, to: Int, newClips: [any Clip]) -> Void` — fires when the user drags a clip *within* a `Track {}` block. `trackIndex` indexes into `video.clips.compactMap { $0 as? Track }`; `newClips` is the rebuilt inner-clip array ready for the consumer to drop into a fresh `Track`.
+- **`TimelineView.onTrackTrim` callback.** `(trackIndex: Int, clipIndex: Int, leadingTrim: CMTime, trailingTrim: CMTime) -> Void` — same Track-rooted indexing as above; mirror of the v0.4.3 `onTrim` shape.
+- **Pure helpers** — `applyTrackReorder(track:from:to:)` returns `[any Clip]`, mirroring `applyChainReorder`. Public for tests + consumers building custom reorder UI.
+
+Out of scope (v0.7.x or later):
+- **Cross-lane drag** (move a clip from chain → Track or between Tracks) — already declared a non-goal in v0.5 RFC; UX-heavy and consumer-specific.
+- **Editing free-floater rows** — clips pinned with `.at(time:)` into a free-floater pack stay read-only. The packing assignment is greedy and brittle to reorder; consumers wanting per-floater edits should use a Track instead. Document the limitation.
+- **Zoom-to-fit / auto-zoom on selection.** Out of scope; consumers can drive `TimelineZoom` via the binding if they want this UX.
+- **Vertical zoom / lane-height adjustment.** Out of scope; lanes stay at the existing `laneHeight` parameter.
+- **Velocity-based zoom inertia.** Out of scope; pinch-end snaps to the gesture's final scale.
+- **Animated zoom transitions.** Out of scope; the binding mutation is whatever SwiftUI's default animation does.
+- **Track lane label tap → expand/collapse.** Considered, dropped — lanes already render fully; collapse is a different feature (track muting / hiding).
+
+### API examples
+
+```swift
+import Kadr
+import KadrUI
+
+// 1. Zoom — opt-in via binding.
+@State private var zoom = TimelineZoom.fitToWidth(360)  // start at fit-to-width
+@State private var time: CMTime = .zero
+
+TimelineView(
+    video,
+    currentTime: $time,
+    zoom: $zoom
+)
+.frame(height: 96)
+.gesture(MagnifyGesture().updating(...))   // app drives the binding via gesture; or
+                                             // pass through TimelineView's built-in
+                                             // pinch-to-zoom (auto-bound when zoom: is non-nil).
+
+// 2. Editing inside a Track.
+TimelineView(
+    video,
+    selectedClipID: $selected,
+    onReorder:      { _, _, newClips in /* chain reorder */ },
+    onTrackReorder: { trackIndex, _, _, newInnerClips in
+        // Rebuild Video with newInnerClips at the given Track.
+    },
+    onTrim:         { _, leading, trailing in /* chain trim */ },
+    onTrackTrim:    { trackIndex, clipIndex, leading, trailing in
+        // Apply trim to the inner clip.
+    }
+)
+```
+
+### Public surface sketch
+
+```swift
+public struct TimelineZoom: Sendable, Equatable {
+
+    /// Horizontal pixel density. Higher = wider clip blocks. Clamped to
+    /// `8...400` px/s to keep blocks selectable at zoom-out and avoid
+    /// runaway timelines at zoom-in.
+    public var pixelsPerSecond: Double
+
+    /// Build a zoom that fits the entire composition into the given width.
+    /// Call sites pass `geometry.size.width` and the composition's duration.
+    public static func fitToWidth(_ width: Double, totalSeconds: Double) -> TimelineZoom
+
+    /// Multiply the current density by `factor`, clamped.
+    public func zoomed(by factor: Double) -> TimelineZoom
+
+    /// Density floor / ceiling. Public so consumers can build custom UIs that
+    /// hint at zoom limits.
+    public static let minPixelsPerSecond: Double = 8
+    public static let maxPixelsPerSecond: Double = 400
+}
+
+public extension TimelineView {
+
+    /// New init param. When `zoom` is non-`nil`, the timeline switches to a
+    /// scrolling render with the specified pixel density and binds a
+    /// magnification gesture to mutate it. When `nil` (default), behavior is
+    /// the v0.6 fit-to-width render.
+    init(
+        _ video: Video,
+        currentTime: Binding<CMTime>? = nil,
+        selectedClipID: Binding<ClipID?>? = nil,
+        zoom: Binding<TimelineZoom>? = nil,
+        laneHeight: CGFloat = 40,
+        laneSpacing: CGFloat = 4,
+        showAudioLanes: Bool = true,
+        showAudioWaveforms: Bool = false,
+        showLaneLabels: Bool = false,
+        onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
+        onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil,
+        onTrackReorder: ((_ trackIndex: Int, _ from: Int, _ to: Int, _ newInnerClips: [any Clip]) -> Void)? = nil,
+        onTrackTrim: ((_ trackIndex: Int, _ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
+    )
+
+    /// Pure: apply a reorder (from → to) to a Track's inner clips. Mirrors
+    /// `applyChainReorder` for chain clips. Public for tests + consumers
+    /// building custom Track-row UI.
+    static func applyTrackReorder(track: Track, from: Int, to: Int) -> [any Clip]
+}
+```
+
+### Engine notes
+
+- **Zoom rendering.** When `zoom != nil`, the timeline body wraps lane rows in a `ScrollView(.horizontal)`. Lane width = `totalSeconds * zoom.pixelsPerSecond`. Existing `pxPerSecond` math shifts from `geometry.width / totalSeconds` to `zoom.pixelsPerSecond`. The playhead and gesture math reference the scroll content's coordinate space.
+- **Pinch gesture.** `MagnifyGesture` (iOS 17+) on the lane stack scales the bound `pixelsPerSecond` by the gesture's `magnification`. Starting density captured on `onChanged` first fire; subsequent updates multiply. Clamped to `[minPixelsPerSecond, maxPixelsPerSecond]`. The gesture composes with selection / reorder / trim (existing pattern: drag uses 5-pt minimum distance).
+- **Track reorder routing.** When the user starts dragging a clip on a Track lane (`LaneKind.track(index, ...)`), the existing reorder math switches to the Track's inner-clips array, and the resulting `newClips` array goes through `onTrackReorder` instead of `onReorder`. Transitions inside a Track travel with their preceding clip identically to chain reorder. The `applyTrackReorder` pure helper does the math without view-layer state.
+- **Track trim routing.** Same swap — when a trim handle drag starts on a Track lane, the eventual `onTrackTrim` callback fires with `trackIndex` (position of the Track in `video.clips.compactMap { $0 as? Track }`) + `clipIndex` (position within the Track's inner clips).
+
+### Tier breakdown
+
+- **Tier 0** *(this PR)* — design doc only. No code.
+- **Tier 1** — `TimelineZoom` + zoom binding + ScrollView wrapping + pinch gesture. ~250 LOC + tests.
+- **Tier 2** — Track-internal reorder + trim. `onTrackReorder` / `onTrackTrim` callbacks; `applyTrackReorder` helper. ~300 LOC + tests.
+- **Tier 3** — Release prep + ship as **v0.7.0**.
+
+### Test strategy
+
+- **`TimelineZoom`** — `fitToWidth` math, `zoomed(by:)` clamping, equality. Pure value-type tests.
+- **Pinch gesture** — `@MainActor` smoke test that mutates zoom via test-only access; integration via reels-studio.
+- **`applyTrackReorder`** — full coverage mirroring `applyChainReorderTests`: empty, single clip, swap adjacent, swap non-adjacent, drag past end, transition-travels-with-preceding-clip.
+- **Body smoke** — TimelineView constructs with non-nil zoom binding and Track-callbacks without crashing.
+
+Target test count: ~30 new tests. Suite floor: 164 → ~194.
+
+### Compatibility
+
+- **Pure additive.** Every v0.6 call site compiles unchanged — both new parameters are optional.
+- **Bumps Kadr dep floor.** No (kadr 0.10's surface isn't required by v0.7); kadr ≥ 0.8.0 stays the floor.
+- **Same platform support.** iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+.
+
+### Open questions (track in PRs, not blocking RFC merge)
+
+- **Vertical scroll for many lanes.** A composition with 6+ tracks plus audio gets tall. v0.7 doesn't add vertical scroll inside `TimelineView` — consumers wrap in their own `ScrollView` if needed. Revisit if real users hit it.
+- **Zoom-state persistence.** `TimelineZoom` is per-view state; consumers persist it themselves (e.g. in a `ProjectStore`). Should `TimelineView` offer a "remembered zoom" affordance? Probably not — keep state ownership explicit.
+- **Track-row trim on the *whole* track.** "Trim every clip in this track to fit under 5 seconds" — niche. Consumers can do this themselves by iterating `track.clips` and applying their own trim math.
