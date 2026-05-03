@@ -167,6 +167,29 @@ extension TimelineView {
         return (merged, result.targetIndex)
     }
 
+    /// Pure: reorder the inner clips of a single ``Kadr/Track``, returning a rebuilt
+    /// `Track` that preserves `startTime`, `name`, and `opacityFactor`. Indices are
+    /// positions within `track.clips`. Inner ``Kadr/Transition``s travel with their
+    /// preceding media clip, mirroring ``applyChainReorder`` semantics. Returns
+    /// `nil` for no-op moves.
+    nonisolated static func applyTrackReorder(
+        track: Track,
+        from sourceIndex: Int,
+        to rawTarget: Int
+    ) -> Track? {
+        guard let result = applyReorder(
+            clips: track.clips,
+            from: sourceIndex,
+            to: rawTarget
+        ) else { return nil }
+        let newClips = result.newClips
+        let start = track.startTime ?? .zero
+        let rebuilt = Track(at: start, name: track.name) {
+            for c in newClips { c }
+        }
+        return track.opacityFactor == 1.0 ? rebuilt : rebuilt.opacity(track.opacityFactor)
+    }
+
     nonisolated static func packFreeFloaters(_ floaters: [LaneItem]) -> [[LaneItem]] {
         let sorted = floaters.sorted { a, b in
             CMTimeCompare(a.startTime, b.startTime) < 0
