@@ -4,6 +4,24 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] - 2026-05-08
+
+Single-surface micro-patch closing a haptic-symmetry gap discovered during `kadr-reels-studio` v0.4 Tier 3 scoping. The v0.4 RFC mistakenly claimed `TimelineView.onClipDragSnap` already shipped in v0.8 (parallel to the `OverlayHost.onLayerTap` errata); verification showed it never did.
+
+### Added
+
+- **`TimelineView.onClipDragSnap(_:)`** — fires when an in-flight reorder drag crosses an adjacent-slot boundary, the moment the dragged clip would land on a new resting position if released. Same callback fires for chain reorders (when `onReorder` is bound) and Track-internal reorders (when `onTrackReorder` is bound). No payload — consumers fire haptics from here.
+- **`TimelineView.snapTransition(previous:current:)`** — `nonisolated public static`. Encodes the change-detection rule the gesture-side fire path uses: first observation latches without firing; same target is silent; change to a different target fires once; direction-symmetric.
+
+### Tests
+
+- 7 new tests: `OnClipDragSnapTests` (5 pure-logic + 2 modifier smoke). Suite: 283 → 290.
+
+### Notes
+
+- Implementation reuses the existing `computeTargetIndex(...)` helper that already drove `.onEnded` reorder placement; `onChanged` now consults it on every drag tick. State tracks last-fired target via two `@State` fields (chain + Track), reset on gesture end.
+- Index-bearing overload (`onClipDragSnap((Int) -> Void)`) deferred until a real consumer surfaces a use case for the target index.
+
 ## [0.9.0] - 2026-05-08
 
 Two-surface mid-cycle patch driven by `kadr-reels-studio` v0.4's UX-polish cycle. Same shape as the kadr v0.10.1 patch landed mid-v0.3. Pure additive across both surfaces; the `TimelineView(...)` init is untouched.
