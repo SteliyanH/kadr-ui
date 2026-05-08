@@ -645,3 +645,84 @@ Target test count: ~70 new tests. Suite floor: 188 → ~258.
 - **Bézier handles vs. discrete keyframes.** The speed-curve editor renders `Animation<Double>` keyframes as discrete points connected by the timing function. A "true" Bézier editor would expose `cubicBezier` control handles directly. Defer — keyframes-with-timing covers the common case.
 - **Caption text styling.** v0.8 ships plain-text cues only. Styled output via `kadr-captions`' `StyledCaption` is reels-studio's import-side concern; the editor doesn't author per-cue colors / positions in this cycle.
 - **Multi-select on overlays.** Single-selection only in v0.8. Multi-select edit (e.g., set opacity on three overlays at once) is a v0.9+ if requested.
+
+## v0.9 — Fixed-center playhead + zoom-snap callback
+
+**Status:** RFC. Tier 0 only — no code.
+
+### Motivation
+
+`kadr-reels-studio` v0.4 is wiring up the *feel* layer of the editor — two-tier toolbar, snap haptics on pinch-zoom, fixed-center playhead during scrub, accent threading. Two surfaces inside `TimelineView` need new public hooks for that work to land:
+
+- **Playhead drift during scrub.** `TimelineView`'s playhead is anchored to its time position inside the scroll content. As the playhead advances during playback or scrub, it walks toward the right edge of the viewport and eventually leaves it, requiring the user to manually scroll the timeline to find it. CapCut / VN / iMovie all anchor the playhead to the screen-center and scroll the *content* under it. There's no opt-in for that mode today.
+- **Snap-aware haptics.** Pinch-to-zoom in `TimelineView` is continuous — `pixelsPerSecond` updates on every magnification delta. UX-wise, beat / second / 5s / 30s alignments are perceptible breakpoints, and consumers want to fire haptics when the user crosses one. The zoom math lives inside `TimelineView` (`TimelineZoom.clamp`, the magnification baseline capture); duplicating it consumer-side to detect crossings is brittle.
+
+`OverlayHost.onLayerTap(_:)` was originally listed in this RFC's scope but it's already shipping in v0.8. Drop it.
+
+### Public API
+
+```swift
+// MARK: - Tier 1: fixedCenterPlayhead
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension TimelineView {
+    /// Anchor the playhead to the horizontal center of the viewport and scroll
+    /// the timeline content under it, instead of letting the playhead drift
+    /// toward the right edge as time advances. No-op when ``currentTime`` was
+    /// not bound at init — the playhead only renders in that case.
+    public func fixedCenterPlayhead(_ enabled: Bool = true) -> TimelineView
+}
+```
+
+- Implemented by wrapping the existing `ScrollView(.horizontal)` in a `ScrollViewReader` and emitting `proxy.scrollTo(_:anchor:)` with `anchor: .center` keyed to a hidden anchor view positioned at `currentTime`.
+- The user can still scroll manually; the modifier governs the *automatic* behavior on `currentTime` change. Manual scrolls don't fight the auto-snap because we only emit `scrollTo` when `currentTime` actually changes (Combine `.removeDuplicates` on the binding).
+- No-op when zoom isn't bound — without zoom there's no scroll view to drive.
+
+```swift
+// MARK: - Tier 2: onZoomSnap
+
+public struct ZoomSnapThreshold: Sendable, Hashable {
+    public let pixelsPerSecond: Double
+    /// Human-readable label — e.g. "1f", "1s", "5s", "30s". Consumers can use
+    /// this for UI ("Snap: 5s") or pick haptic strength based on the bracket.
+    public let label: String
+}
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension TimelineView {
+    /// Fires whenever pinch-zoom crosses an internal snap threshold. The
+    /// threshold list is fixed (frame / second / 5s / 30s) — kadr-ui owns the
+    /// zoom math, so it owns the breakpoints.
+    public func onZoomSnap(_ action: @escaping (ZoomSnapThreshold) -> Void) -> TimelineView
+}
+```
+
+- Threshold list at v0.9.0: `[1 frame (~30 px/s @ 30fps), 1 second (50 px/s), 5 seconds (10 px/s), 30 seconds (~1.7 px/s)]`. Exposed as `ZoomSnapThreshold.standard: [ZoomSnapThreshold]` for consumers who want to label zoom levels in their UI.
+- Fires only on *crossing* — the magnification gesture's `onChanged` checks the previous and current `pixelsPerSecond` against the threshold list; emits when an entry sits between them. No emission when the gesture stays inside one bracket.
+- Doesn't snap the value itself. The consumer decides whether to play haptics, show a label, or do nothing. If a future tier wants opt-in snap-to-threshold behavior (the gesture *settles* at the nearest threshold on `onEnded`), that's a v0.9.1 patch — out of scope here.
+
+### Tier breakdown
+
+- **Tier 0** *(this PR)* — RFC only. No code.
+- **Tier 1** — `fixedCenterPlayhead(_:)` modifier + `ScrollViewReader` integration. Anchor view + `.removeDuplicates` Combine plumbing. ~80 LOC + ~8 tests (anchor presence, no-op when `currentTime` is nil, no-op when zoom is nil).
+- **Tier 2** — `onZoomSnap(_:)` callback + `ZoomSnapThreshold` struct + crossing-detection helper. `nonisolated static crossings(prev:current:in:)` for testability. ~60 LOC + ~10 tests (single-bracket no-fire, single-crossing emission, multi-crossing on rapid zoom, direction-symmetric).
+- **Tier 3** — Release prep + ship as **v0.9.0**.
+
+### Test strategy
+
+- **`fixedCenterPlayhead`** — `TimelineView` body construction with the modifier flipped on / off; smoke that `ScrollViewReader` anchor positioning compiles. Real centering is visual — `swift-snapshot-testing` harness is on the v1.0 list, so v0.9 sticks to construction smoke.
+- **`onZoomSnap`** — pure logic on `crossings(prev:current:in:)`. Cases: stay inside one bracket → empty result; cross one threshold up → single entry; cross multiple on rapid zoom → ordered list; symmetric on zoom-out (direction-agnostic, consumer can detect direction from `prev` vs `current` if needed in a future tier).
+
+Target test count: ~18 new tests.
+
+### Compatibility
+
+- **Pure additive.** Both surfaces are new modifiers; the `TimelineView(...)` init is untouched.
+- **Kadr floor.** Stays at **≥ 0.10.0**.
+- **Platform.** iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+.
+
+### Open questions (track in PRs, not blocking RFC merge)
+
+- **Snap-to-threshold settle.** v0.9 fires a callback on crossing but doesn't *change* `pixelsPerSecond`. v0.9.1 could add an opt-in `.snapToThresholds()` modifier that nudges zoom to the nearest threshold on `gesture.onEnded`. Defer — fires-on-crossing is what reels-studio v0.4 needs and snap-to-settle changes the feel materially.
+- **Threshold customization.** `ZoomSnapThreshold` is a public struct so consumers *could* build their own list, but `onZoomSnap` only consumes the kadr-ui internal list at v0.9. Adding a `thresholds:` overload is a v0.9.x patch if community demand surfaces.
+- **Manual-scroll detente.** When the user pans the timeline manually with `fixedCenterPlayhead` on, current spec lets the auto-snap re-center on the next `currentTime` change. CapCut adds a brief "user is scrubbing" detente that suppresses re-centering for ~500ms. Not in v0.9 scope; track in a follow-up if reels-studio v0.4 manual QA flags it.
