@@ -44,6 +44,12 @@ public struct TimelineView: View {
     private let video: Video
     private let currentTime: Binding<CMTime>?
     private let selectedClipID: Binding<ClipID?>?
+    /// Optional multi-select binding. Coexists with ``selectedClipID``; render
+    /// sites union-check both via ``clipMatchesSelection(id:single:set:)``.
+    /// Tap behavior is unchanged — taps continue writing to `selectedClipID`;
+    /// the consumer routes multi-select via ``onLongPressClip`` + tap-toggle
+    /// into the set. Added in v0.9.2.
+    private let selectedClipIDs: Binding<Set<ClipID>>?
     private let zoom: Binding<TimelineZoom>?
     private let laneHeight: CGFloat
     private let laneSpacing: CGFloat
@@ -87,6 +93,10 @@ public struct TimelineView: View {
     /// Last `targetIndex` fired through ``onClipDragSnap`` during the current
     /// Track-internal reorder drag. `nil` outside the gesture.
     @State private var lastTrackSnapIndex: Int?
+
+    /// Callback fired on a 0.5s long-press of any media clip with a non-nil
+    /// `clipID`. Set via the ``onLongPressClip(_:)`` modifier. Added in v0.9.2.
+    private var onLongPressClip: ((ClipID) -> Void)?
 
     /// In-flight pinch baseline. `nil` outside the gesture; captures the
     /// pre-gesture density on first `onChanged` so subsequent updates multiply
@@ -184,6 +194,7 @@ public struct TimelineView: View {
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
         selectedClipID: Binding<ClipID?>? = nil,
+        selectedClipIDs: Binding<Set<ClipID>>? = nil,
         zoom: Binding<TimelineZoom>? = nil,
         laneHeight: CGFloat = 40,
         laneSpacing: CGFloat = 4,
@@ -198,6 +209,7 @@ public struct TimelineView: View {
         self.video = video
         self.currentTime = currentTime
         self.selectedClipID = selectedClipID
+        self.selectedClipIDs = selectedClipIDs
         self.zoom = zoom
         self.laneHeight = laneHeight
         self.laneSpacing = laneSpacing
@@ -433,6 +445,41 @@ public struct TimelineView: View {
         return copy
     }
 
+    /// Attach a callback that fires on a 0.5s long-press of any media clip
+    /// with a non-nil ``Kadr/Clip/clipID``. Composes with the existing tap
+    /// gesture via `simultaneousGesture` — the long-press fires only when
+    /// the user holds without dragging (the 10-pt minimum-distance reorder
+    /// drag still takes precedence). Symmetric across chain + Track lanes.
+    ///
+    /// ```swift
+    /// TimelineView(video, selectedClipIDs: $multiSelected)
+    ///     .onLongPressClip { id in
+    ///         multiSelectActive = true
+    ///         multiSelected.insert(id)
+    ///     }
+    /// ```
+    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+    public func onLongPressClip(_ action: @escaping (ClipID) -> Void) -> TimelineView {
+        var copy = self
+        copy.onLongPressClip = action
+        return copy
+    }
+
+    /// Whether `id` should render as selected, given the union of the
+    /// single-binding and set-binding selection state. Used by every clip
+    /// render site (`videoRow`, `imageRow`, `transitionRow`, Track lane
+    /// items) so the rule has a single seam. `nonisolated` for testability.
+    public nonisolated static func clipMatchesSelection(
+        id: ClipID?,
+        single: ClipID?,
+        set: Set<ClipID>?
+    ) -> Bool {
+        guard let id else { return false }
+        if single == id { return true }
+        if let set, set.contains(id) { return true }
+        return false
+    }
+
     /// Returns the new "last fired" target index after observing a transition
     /// from `previous` to `current`, plus whether the snap callback should
     /// fire. Mirrors the gesture-side update in ``reorderGesture(for:pxPerSecond:)``
@@ -608,7 +655,11 @@ public struct TimelineView: View {
     private func laneItemBlock(item: LaneItem, pxPerSecond: Double, waveform: AudioWaveform? = nil) -> some View {
         let x = max(0, CMTimeGetSeconds(item.startTime) * pxPerSecond)
         let w = max(0, CMTimeGetSeconds(item.duration) * pxPerSecond)
-        let isSelected = selectedClipID != nil && item.clipID != nil && selectedClipID?.wrappedValue == item.clipID
+        let isSelected = TimelineView.clipMatchesSelection(
+            id: item.clipID,
+            single: selectedClipID?.wrappedValue,
+            set: selectedClipIDs?.wrappedValue
+        )
         let block = RoundedRectangle(cornerRadius: 4)
             .fill(laneItemColor(item.kind))
             .frame(width: w, height: laneHeight)
@@ -629,7 +680,25 @@ public struct TimelineView: View {
         .offset(x: x)
 
         if let id = item.clipID, let binding = selectedClipID {
-            view.onTapGesture { binding.wrappedValue = id }
+            longPressed(view.onTapGesture { binding.wrappedValue = id }, id: id)
+        } else if let id = item.clipID {
+            longPressed(view, id: id)
+        } else {
+            view
+        }
+    }
+
+    /// Attach the long-press gesture (when `onLongPressClip` is set) so it
+    /// composes with the tap selection without swallowing it. Used by both
+    /// the chain and Track-lane render paths so the gesture surface is
+    /// uniform.
+    @ViewBuilder
+    private func longPressed<V: View>(_ view: V, id: ClipID) -> some View {
+        if let onLongPressClip {
+            view.simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .onEnded { _ in onLongPressClip(id) }
+            )
         } else {
             view
         }
@@ -655,7 +724,11 @@ public struct TimelineView: View {
         let isTrimming = trimmingTrackInfo == key
         let dragOffsetX = isDragging ? trackDragOffset : 0
         let (liveWidth, liveTrimOffset) = trackLiveTrimMetrics(for: key, baseWidth: w)
-        let isSelected = selectedClipID != nil && item.clipID != nil && selectedClipID?.wrappedValue == item.clipID
+        let isSelected = TimelineView.clipMatchesSelection(
+            id: item.clipID,
+            single: selectedClipID?.wrappedValue,
+            set: selectedClipIDs?.wrappedValue
+        )
         let canTrim = item.kind != .transition && onTrackTrim != nil
 
         let inner = RoundedRectangle(cornerRadius: 4)
@@ -704,9 +777,14 @@ public struct TimelineView: View {
             )
         )
         if let id = item.clipID, let binding = selectedClipID {
-            withGesture.onTapGesture {
-                binding.wrappedValue = (binding.wrappedValue == id) ? nil : id
-            }
+            longPressed(
+                withGesture.onTapGesture {
+                    binding.wrappedValue = (binding.wrappedValue == id) ? nil : id
+                },
+                id: id
+            )
+        } else if let id = item.clipID {
+            longPressed(withGesture, id: id)
         } else {
             withGesture
         }
@@ -956,7 +1034,11 @@ public struct TimelineView: View {
                 .animation(.snappy(duration: 0.18), value: offset)
                 .zIndex(isPartOfSourceGroup(index) ? 1 : 0)
         } else {
-            let isSelected = clip.clipID != nil && clip.clipID == selectedClipID?.wrappedValue
+            let isSelected = TimelineView.clipMatchesSelection(
+                id: clip.clipID,
+                single: selectedClipID?.wrappedValue,
+                set: selectedClipIDs?.wrappedValue
+            )
             let isDragging = draggingIndex == index
             // Live trim deltas: keep the slot's reserved width fixed (so neighbors don't
             // reflow during the drag) but morph the inner content's width and offset.
