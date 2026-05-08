@@ -726,3 +726,49 @@ Target test count: ~18 new tests.
 - **Snap-to-threshold settle.** v0.9 fires a callback on crossing but doesn't *change* `pixelsPerSecond`. v0.9.1 could add an opt-in `.snapToThresholds()` modifier that nudges zoom to the nearest threshold on `gesture.onEnded`. Defer — fires-on-crossing is what reels-studio v0.4 needs and snap-to-settle changes the feel materially.
 - **Threshold customization.** `ZoomSnapThreshold` is a public struct so consumers *could* build their own list, but `onZoomSnap` only consumes the kadr-ui internal list at v0.9. Adding a `thresholds:` overload is a v0.9.x patch if community demand surfaces.
 - **Manual-scroll detente.** When the user pans the timeline manually with `fixedCenterPlayhead` on, current spec lets the auto-snap re-center on the next `currentTime` change. CapCut adds a brief "user is scrubbing" detente that suppresses re-centering for ~500ms. Not in v0.9 scope; track in a follow-up if reels-studio v0.4 manual QA flags it.
+
+## v0.9.1 — onClipDragSnap
+
+**Status:** RFC. No code yet.
+
+### Motivation
+
+`kadr-reels-studio` v0.4 Tier 3 wires snap haptics on the timeline's pinch-zoom (via the v0.9 `onZoomSnap`) and *was supposed to* mirror them on drag-snap-to-adjacent-clip. The v0.4 RFC claimed `TimelineView.onClipDragSnap` already shipped in v0.8 (parallel to the `OverlayHost.onLayerTap` errata). Verification during Tier 3 scoping showed it never landed — the v0.9 cycle accidentally inherited the gap.
+
+This is a single-surface micro-patch — same shape as kadr v0.10.1's animation-clearing modifiers — to close the haptic-symmetry gap before Tier 3 ships.
+
+### Public API
+
+```swift
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension TimelineView {
+    /// Fires when an in-flight reorder drag crosses an adjacent-slot
+    /// boundary — the moment the dragged clip would land on a new resting
+    /// position if released. Same callback fires for chain reorders (when
+    /// `onReorder` is bound) and Track-internal reorders (when
+    /// `onTrackReorder` is bound). Consumers fire haptics from here.
+    public func onClipDragSnap(_ action: @escaping () -> Void) -> TimelineView
+}
+```
+
+- **Trigger.** During each reorder gesture's `onChanged`, recompute the would-be `targetIndex` via the existing `computeTargetIndex(...)` helper. Fire when the value differs from the previously-fired one. State lives on a single `@State lastChainSnapIndex: Int?` (chain) + `lastTrackSnapIndex: TrackDragKey?` (Track) — reset on `onEnded`.
+- **No payload.** Consumers wire haptics; they don't need the index. A future overload (`onClipDragSnap((Int) -> Void)`) could expose the index if useful — defer until requested.
+- **Direction-symmetric.** Drag-left and drag-right both fire each time the boundary crosses.
+- **Both gestures.** Chain (`reorderGesture`) and Track-internal (`trackReorderGesture`) share the modifier — consumers don't have to wire two callbacks for the same haptic.
+
+### Tier breakdown
+
+- **Tier 0** *(this PR)* — RFC only. No code.
+- **Tier 1** — `onClipDragSnap(_:)` modifier + chain + Track wiring. ~40 LOC + ~6 tests (target-index change detection on each gesture, no-emit when target stays put, no-emit at gesture start, fire-on-each-cross-back-and-forth).
+- **Tier 2** — Release prep + ship as **v0.9.1**.
+
+### Compatibility
+
+- **Pure additive.** Single new modifier; reorder gesture call paths unchanged for non-callers.
+- **Kadr floor.** Stays at **≥ 0.10.0**.
+- **Platform.** iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+.
+
+### Open questions
+
+- **Index-bearing overload.** The current spec is no-payload. Add `onClipDragSnap((Int) -> Void)` if a real consumer surfaces a use case for the target index (e.g. live-label "moves to position 3"). Defer.
+- **Threshold customization for snap aggressiveness.** Today the snap point is the slot midpoint (set by the existing `computeTargetIndex` math). A future patch could let consumers pull or push the snap threshold (sticky / loose). Out of scope; revisit if QA flags.

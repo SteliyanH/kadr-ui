@@ -78,6 +78,10 @@ Pure additive, three tiers (one per surface + release prep). Driven by `kadr-ree
 
 `OverlayHost.onLayerTap(_:)` was originally on this cycle's list but already shipped in v0.8.0 — kadr-reels-studio v0.4 Tier 6 wires against the existing surface.
 
+## v0.9.1 — onClipDragSnap *(planned)*
+
+Single-surface micro-patch. `TimelineView.onClipDragSnap(_:)` fires when an in-flight reorder drag crosses an adjacent-slot boundary — the moment the dragged clip would land on a new resting position. Closes a haptic-symmetry gap discovered during `kadr-reels-studio` v0.4 Tier 3 scoping (the v0.4 RFC mistakenly claimed this surface already shipped in v0.8). Same shape for chain reorders and Track-internal reorders.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.
