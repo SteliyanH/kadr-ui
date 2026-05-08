@@ -69,14 +69,14 @@ Closes the v0.6 deferral list. Built against the existing kadr ≥ 0.10 surface 
 
 Custom `TextAnimation`s round-trip as `.custom` so the picker can clear them but not re-author. Bézier control-handle UX, styled caption authoring, and multi-select on overlays remain deferred (real-but-niche).
 
-## v0.9.0 — Fixed-center playhead + zoom-snap callback *(planned)*
+## v0.9.0 — Fixed-center playhead + zoom-snap callback ✓ shipped
 
-Pure additive, three tiers (one per surface + release prep). Driven by `kadr-reels-studio` v0.4's UX-polish cycle (fixed-center playhead during scrub; snap haptics on pinch-zoom crossings).
+Pure additive, three tiers (one per surface + release prep). Driven by `kadr-reels-studio` v0.4's UX-polish cycle.
 
-- **`TimelineView.fixedCenterPlayhead(_:)`** — anchor the playhead to the viewport center and scroll content under it. Opt-in modifier; no-op when `currentTime` / `zoom` aren't bound.
-- **`TimelineView.onZoomSnap(_:)`** — fires on pinch-zoom crossings of an internal threshold list (frame / second / 5s / 30s). `ZoomSnapThreshold` struct exposes the list for consumers' label / haptic decisions.
+- **`TimelineView.fixedCenterPlayhead(_:)`** — anchors the playhead to the viewport center and scrolls content under it via `ScrollViewReader` + an invisible 1×1 anchor at the playhead's x. Opt-in modifier; no-op when `currentTime` / `zoom` aren't bound.
+- **`TimelineView.onZoomSnap(_:)`** — fires on pinch-zoom crossings of `ZoomSnapThreshold.standard` (frame / second / 5s / 30s). `nonisolated public static crossings(prev:current:in:)` is the testable seam.
 
-`OverlayHost.onLayerTap(_:)` was originally on this cycle's list but ships in v0.8.0 — kadr-reels-studio v0.4 Tier 6 (overlay tap-to-select) wires against the existing surface.
+`OverlayHost.onLayerTap(_:)` was originally on this cycle's list but already shipped in v0.8.0 — kadr-reels-studio v0.4 Tier 6 wires against the existing surface.
 
 ## v1.0.0 — Production Ready
 
@@ -109,6 +109,7 @@ Tracks Kadr v1.0.
 | 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
 | 0.7.0 / 0.7.1 | ≥ 0.10.0 *(uses `Track.opacityFactor`)* |
 | 0.8.0 | ≥ 0.10.0 |
+| 0.9.0 | ≥ 0.10.0 |
 | 1.0.0 *(planned)* | ≥ 1.0.0 |
 
 ## Contributing

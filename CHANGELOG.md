@@ -4,6 +4,26 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-05-08
+
+Two-surface mid-cycle patch driven by `kadr-reels-studio` v0.4's UX-polish cycle. Same shape as the kadr v0.10.1 patch landed mid-v0.3. Pure additive across both surfaces; the `TimelineView(...)` init is untouched.
+
+### Added
+
+- **`TimelineView.fixedCenterPlayhead(_:)`** — anchors the playhead to the horizontal center of the viewport and scrolls the timeline content under it, instead of letting the playhead drift toward the right edge as time advances. CapCut / VN / iMovie pattern. Implemented by wrapping the existing `ScrollView` in a `ScrollViewReader` with an invisible 1×1 anchor positioned at the playhead's x; `proxy.scrollTo(_:anchor: .center)` re-emits on every `currentTime` change with a 0.15s easeOut. Three no-op fallbacks: `currentTime` nil → playhead doesn't render anyway; `zoom` nil → no ScrollView at all; `enabled: false` → identical to legacy behavior.
+- **`TimelineView.onZoomSnap(_:)`** — fires when pinch-zoom crosses a perceptible density breakpoint. Wired through the existing `zoomGesture.onChanged`: captures `prev` before applying `TimelineZoom.clamp`, runs `ZoomSnapThreshold.crossings(prev:current:in:)` against `.standard`, fires once per crossed threshold per gesture update. No emission when `prev == current` (stays inside one bracket — the steady-state pinch case). Direction-symmetric.
+- **`ZoomSnapThreshold`** — `Sendable, Hashable` struct with `pixelsPerSecond: Double` + `label: String`. `.standard: [ZoomSnapThreshold]` ships the v0.9.0 list (frame at 30fps / 1s / 5s / 30s; densest first by `pixelsPerSecond`). Picked from CapCut / VN feel-tuning.
+- **`ZoomSnapThreshold.crossings(prev:current:in:)`** — `nonisolated public static`. Returns thresholds strictly between `prev` and `current` (open interval; landing exactly on a value doesn't count). No emission when `prev == current`.
+
+### Tests
+
+- 20 new tests across the cycle: `FixedCenterPlayheadTests` (7), `ZoomSnapThresholdTests` (10), `OnZoomSnapModifierTests` (3). Suite: 263 → 283.
+
+### Notes
+
+- `OverlayHost.onLayerTap(_:)` was originally listed in the v0.9 RFC scope but already shipped in v0.8.0 (alongside `OverlayInspectorPanel`). Dropped from this cycle without a replacement — `kadr-reels-studio` v0.4 Tier 6 wires against the existing v0.8 surface.
+- **Snap-to-threshold settle** (gesture *settles* at the nearest threshold on `onEnded`) and **custom threshold lists** are deferred to a v0.9.x patch — RFC noted both as low priority until reels-studio v0.4 manual QA flags either as a feel gap.
+
 ## [0.8.0] - 2026-05-03
 
 Three editor surfaces deferred since v0.6, all built against kadr's existing public surface (no kadr v0.11 needed). Closes the demo-critical gaps that were blocking kadr-reels-studio from being a complete editor walkthrough — speed authoring, caption editing, and overlay property + keyframe editing.
