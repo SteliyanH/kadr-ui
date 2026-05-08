@@ -73,6 +73,21 @@ public struct TimelineView: View {
     /// v0.9.
     private var onZoomSnap: ((ZoomSnapThreshold) -> Void)?
 
+    /// Callback fired when an in-flight reorder drag crosses an adjacent-slot
+    /// boundary. Set via the ``onClipDragSnap(_:)`` modifier. Same callback
+    /// fires for chain and Track-internal reorders. Added in v0.9.1.
+    private var onClipDragSnap: (() -> Void)?
+
+    /// Last `targetIndex` fired through ``onClipDragSnap`` during the current
+    /// chain reorder drag. `nil` outside the gesture. Used to detect snap
+    /// crossings — fire only when the value changes from one onChanged tick
+    /// to the next.
+    @State private var lastChainSnapIndex: Int?
+
+    /// Last `targetIndex` fired through ``onClipDragSnap`` during the current
+    /// Track-internal reorder drag. `nil` outside the gesture.
+    @State private var lastTrackSnapIndex: Int?
+
     /// In-flight pinch baseline. `nil` outside the gesture; captures the
     /// pre-gesture density on first `onChanged` so subsequent updates multiply
     /// from a stable base instead of compounding.
@@ -393,6 +408,48 @@ public struct TimelineView: View {
         var copy = self
         copy.onZoomSnap = action
         return copy
+    }
+
+    /// Attach a callback that fires when an in-flight reorder drag crosses an
+    /// adjacent-slot boundary — the moment the dragged clip would land on a
+    /// new resting position if released. Same callback fires for chain
+    /// reorders (when ``onReorder`` is bound) and Track-internal reorders
+    /// (when ``onTrackReorder`` is bound). Consumers fire haptics from here.
+    ///
+    /// ```swift
+    /// TimelineView(video, /* … */, onReorder: { … })
+    ///     .onClipDragSnap {
+    ///         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    ///     }
+    /// ```
+    ///
+    /// No payload — consumers only need to know "the drag crossed a boundary".
+    /// An index-bearing overload may follow if a real consumer surfaces a use
+    /// case for the target index.
+    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+    public func onClipDragSnap(_ action: @escaping () -> Void) -> TimelineView {
+        var copy = self
+        copy.onClipDragSnap = action
+        return copy
+    }
+
+    /// Returns the new "last fired" target index after observing a transition
+    /// from `previous` to `current`, plus whether the snap callback should
+    /// fire. Mirrors the gesture-side update in ``reorderGesture(for:pxPerSecond:)``
+    /// and ``trackReorderGesture(trackIndex:clipIndex:items:pxPerSecond:)`` so
+    /// the change-detection rule has a single testable seam:
+    /// - First observation of a value (`previous == nil`) latches the target
+    ///   without firing — there's no "previous boundary" to have crossed.
+    /// - A change to a different target fires once.
+    /// - Returning to the same target (no change) is silent.
+    ///
+    /// `nonisolated` so it's callable from any context.
+    public nonisolated static func snapTransition(
+        previous: Int?,
+        current: Int
+    ) -> (shouldFire: Bool, newPrevious: Int) {
+        guard let previous else { return (false, current) }
+        return (previous != current, current)
     }
 
     /// Identity for `.task(id:)` driving waveform loading — re-fires when the audio
@@ -728,11 +785,28 @@ public struct TimelineView: View {
                     draggingTrackInfo = TrackDragKey(trackIndex: trackIndex, clipIndex: clipIndex)
                 }
                 trackDragOffset = value.translation.width
+                if let onClipDragSnap {
+                    let widths: [CGFloat] = items.map {
+                        CGFloat(CMTimeGetSeconds($0.duration) * pxPerSecond)
+                    }
+                    let target = TimelineView.computeTargetIndex(
+                        source: clipIndex,
+                        dragX: value.translation.width,
+                        slotWidths: widths
+                    )
+                    let (fire, newPrev) = TimelineView.snapTransition(
+                        previous: lastTrackSnapIndex,
+                        current: target
+                    )
+                    if fire { onClipDragSnap() }
+                    lastTrackSnapIndex = newPrev
+                }
             }
             .onEnded { value in
                 defer {
                     draggingTrackInfo = nil
                     trackDragOffset = 0
+                    lastTrackSnapIndex = nil
                 }
                 guard onTrackReorder != nil else { return }
                 let widths: [CGFloat] = items.map {
@@ -1113,11 +1187,28 @@ public struct TimelineView: View {
                 if onReorder == nil { return }
                 if draggingIndex == nil { draggingIndex = index }
                 dragOffset = value.translation.width
+                // Snap-haptic detection: compute the would-be drop slot in
+                // real time; fire onClipDragSnap when it changes from the
+                // previously-fired value (or initialize on first compute).
+                if let onClipDragSnap {
+                    let target = computeTargetIndex(
+                        source: index,
+                        dragX: value.translation.width,
+                        pxPerSecond: pxPerSecond
+                    )
+                    let (fire, newPrev) = TimelineView.snapTransition(
+                        previous: lastChainSnapIndex,
+                        current: target
+                    )
+                    if fire { onClipDragSnap() }
+                    lastChainSnapIndex = newPrev
+                }
             }
             .onEnded { value in
                 defer {
                     draggingIndex = nil
                     dragOffset = 0
+                    lastChainSnapIndex = nil
                 }
                 guard onReorder != nil else { return }
                 let target = computeTargetIndex(
