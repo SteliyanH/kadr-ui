@@ -68,6 +68,11 @@ public struct TimelineView: View {
     /// then called with this id on every `currentTime` change to recenter it.
     private static let playheadAnchorID = "kadr-ui.playhead-anchor"
 
+    /// Callback fired when pinch-zoom crosses a ``ZoomSnapThreshold``. Set via
+    /// the ``onZoomSnap(_:)`` modifier; default `nil` = no emission. Added in
+    /// v0.9.
+    private var onZoomSnap: ((ZoomSnapThreshold) -> Void)?
+
     /// In-flight pinch baseline. `nil` outside the gesture; captures the
     /// pre-gesture density on first `onChanged` so subsequent updates multiply
     /// from a stable base instead of compounding.
@@ -348,11 +353,46 @@ public struct TimelineView: View {
                     pinchBaseline = baseline
                 }
                 let scaled = baseline * Double(magnification)
-                binding.wrappedValue.pixelsPerSecond = TimelineZoom.clamp(scaled)
+                let prev = binding.wrappedValue.pixelsPerSecond
+                let next = TimelineZoom.clamp(scaled)
+                binding.wrappedValue.pixelsPerSecond = next
+                // Emit one callback per threshold crossed by [prev, next].
+                // No-op when the gesture stays inside one bracket (the
+                // common case during a steady-state pinch).
+                if let onZoomSnap, prev != next {
+                    for threshold in ZoomSnapThreshold.crossings(prev: prev, current: next) {
+                        onZoomSnap(threshold)
+                    }
+                }
             }
             .onEnded { _ in
                 pinchBaseline = nil
             }
+    }
+
+    /// Attach a callback that fires whenever pinch-zoom crosses a
+    /// ``ZoomSnapThreshold``. Threshold list is the fixed
+    /// ``ZoomSnapThreshold/standard`` (frame / second / 5s / 30s) — kadr-ui
+    /// owns the zoom math and therefore the breakpoints.
+    ///
+    /// Fires only on *crossing*: a threshold sitting between `prev` and
+    /// `current` `pixelsPerSecond` values is emitted; values that stay inside
+    /// one bracket emit nothing. No emission when `prev == current`.
+    /// Direction-symmetric — zoom-in and zoom-out both fire; consumers can
+    /// detect direction from the threshold's `pixelsPerSecond` against the
+    /// current zoom if they need it.
+    ///
+    /// ```swift
+    /// TimelineView(video, currentTime: $time, zoom: $zoom)
+    ///     .onZoomSnap { threshold in
+    ///         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    ///     }
+    /// ```
+    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+    public func onZoomSnap(_ action: @escaping (ZoomSnapThreshold) -> Void) -> TimelineView {
+        var copy = self
+        copy.onZoomSnap = action
+        return copy
     }
 
     /// Identity for `.task(id:)` driving waveform loading — re-fires when the audio
