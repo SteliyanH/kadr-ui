@@ -82,6 +82,15 @@ Pure additive, three tiers (one per surface + release prep). Driven by `kadr-ree
 
 Single-surface micro-patch. `TimelineView.onClipDragSnap(_:)` fires when an in-flight reorder drag crosses an adjacent-slot boundary — the moment the dragged clip would land on a new resting position. Closes a haptic-symmetry gap discovered during `kadr-reels-studio` v0.4 Tier 3 scoping (the v0.4 RFC mistakenly claimed this surface already shipped in v0.8). Same shape for chain reorders and Track-internal reorders. `nonisolated public static snapTransition(previous:current:)` is the testable seam.
 
+## v0.9.2 — Multi-select + long-press *(planned)*
+
+Two-surface micro-patch driven by `kadr-reels-studio` v0.4 Tier 5 (Track creation UI):
+
+- **`TimelineView(... selectedClipIDs:)`** — additive `Binding<Set<ClipID>>?` parameter. Coexists with `selectedClipID`; render sites union-check both. Consumers driving multi-select see proper selection rings on every member of the set.
+- **`TimelineView.onLongPressClip(_:)`** — fires on a 0.5s long-press of any media clip with a non-nil `clipID`. Composes with the existing tap gesture via `simultaneousGesture`. Symmetric across chain + Track lanes.
+
+Pure additive. Same shape as v0.9.1's micro-patch.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.
