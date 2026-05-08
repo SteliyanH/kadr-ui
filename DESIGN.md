@@ -772,3 +772,73 @@ extension TimelineView {
 
 - **Index-bearing overload.** The current spec is no-payload. Add `onClipDragSnap((Int) -> Void)` if a real consumer surfaces a use case for the target index (e.g. live-label "moves to position 3"). Defer.
 - **Threshold customization for snap aggressiveness.** Today the snap point is the slot midpoint (set by the existing `computeTargetIndex` math). A future patch could let consumers pull or push the snap threshold (sticky / loose). Out of scope; revisit if QA flags.
+
+## v0.9.2 — Multi-select + long-press
+
+**Status:** RFC. No code yet.
+
+### Motivation
+
+`kadr-reels-studio` v0.4 Tier 5 (Track creation UI — "wrap selection in track") needs two surfaces from `TimelineView` that don't ship today, both blocking proper UX:
+
+- **Visual feedback for multi-selected clips.** `TimelineView`'s selection ring is single-clip (`Binding<ClipID?>`). Without exposing a multi-select binding, multi-selected clips render identical to unselected ones — the user can't see what they've selected. Faking multi-select consumer-side via the existing single binding loses this entirely.
+- **Long-press to enter multi-select mode.** CapCut / VN / iMovie all enter multi-select via long-press on a clip. `TimelineView` only exposes `onTapGesture` for selection; there's no callback for long-press. Forcing the consumer to build a "Select Clips" toolbar-button mode toggle ships, but the gesture is the more discoverable affordance.
+
+This is the same shape as v0.9.1's `onClipDragSnap` patch — narrow micro-additions driven by a downstream cycle. Two surfaces, both additive, no breaking changes.
+
+### Public API
+
+```swift
+// MARK: - Tier 1: Multi-select binding
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+public struct TimelineView: View {
+    public init(
+        _ video: Video,
+        currentTime: Binding<CMTime>? = nil,
+        selectedClipID: Binding<ClipID?>? = nil,
+        selectedClipIDs: Binding<Set<ClipID>>? = nil,  // NEW
+        zoom: Binding<TimelineZoom>? = nil,
+        // …
+    )
+}
+```
+
+- **Coexists with `selectedClipID`.** A clip renders selected when *either* binding marks it: `(selectedClipID == clip.id) || selectedClipIDs.contains(clip.id)`. Consumers running both bindings (current single-select + new multi-select) see the union; the typical multi-select UX is to clear `selectedClipID` while a multi-select gesture is active.
+- **Tap behavior is unchanged** — taps continue to write to `selectedClipID` only. Toggle-into-set semantics are the consumer's call, driven by `onLongPressClip` entering a mode where the consumer intercepts tap binding writes. v0.9.2 doesn't bake mode state into `TimelineView`.
+- **Renders rings on every member.** All three render sites (`videoRow`, `imageRow`, `transitionRow`) extend `isSelected` to check both bindings.
+
+```swift
+// MARK: - Tier 1 (continued): onLongPressClip
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension TimelineView {
+    /// Fires on a 0.5s long-press of any media clip with a non-nil
+    /// ``Kadr/Clip/clipID``. Hands over the clip's id; consumers typically
+    /// use this to enter a multi-select mode and seed the set with the
+    /// long-pressed clip.
+    public func onLongPressClip(_ action: @escaping (ClipID) -> Void) -> TimelineView
+}
+```
+
+- **Composes with the existing tap gesture** via SwiftUI's `.simultaneousGesture` so both can register without one swallowing the other. The 5-pt minimum-distance reorder drag (`DragGesture(minimumDistance: 10)`) sits above; long-press fires only when the user holds without dragging.
+- **Track-lane clips fire the same callback.** Symmetric with `onTapGesture` coverage in v0.7+.
+- **Single-fire per gesture.** No repeated emissions on continued press.
+
+### Tier breakdown
+
+- **Tier 0** *(this PR)* — RFC only. No code.
+- **Tier 1** — Both surfaces in one PR (small enough — ~50 LOC + ~10 tests). `selectedClipIDs` parameter + render-site `isSelected` extensions; `onLongPressClip(_:)` modifier + LongPressGesture wired alongside existing tap. Pure helpers exposed `nonisolated public static`: `clipMatchesSelection(id:single:set:)` for the union check.
+- **Tier 2** — Release prep + ship as **v0.9.2**.
+
+### Compatibility
+
+- **Pure additive.** Existing `selectedClipID:` parameter and `onTapGesture` selection write are unchanged.
+- **Kadr floor.** Stays at **≥ 0.10.0**.
+- **Platform.** iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+.
+
+### Open questions
+
+- **Long-press duration tuning.** v0.9.2 ships 0.5s (SwiftUI's `LongPressGesture` default). CapCut feels closer to 0.4s; VN to 0.6s. Defer customization until reels-studio v0.4 manual QA; expose `onLongPressClip(minimumDuration:_:)` overload if the default is wrong.
+- **Multi-select drag reorder.** Today only single clips reorder. Multi-select drag — the gesture moves an arbitrary subset — is a much bigger change (kadr's `Video` builder doesn't model "swap these N clips into block X"). Out of scope; track if reels-studio v0.4+ asks for it.
+- **Long-press on overlays (`OverlayHost`).** Symmetric surface for overlay multi-select. Defer until a real consumer asks — overlays are flat-z-ordered (Layers sheet shows everything), not lane-positioned, so the use case is weaker.
