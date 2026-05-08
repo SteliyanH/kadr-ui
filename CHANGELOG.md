@@ -4,6 +4,26 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.2] - 2026-05-08
+
+Two-surface micro-patch driving `kadr-reels-studio` v0.4 Tier 5 (Track creation UI — "wrap selection in track"). Same shape as v0.9.1's micro-patch.
+
+### Added
+
+- **`TimelineView(..., selectedClipIDs: Binding<Set<ClipID>>?)`** — additive init parameter for multi-select. Coexists with the v0.6 `selectedClipID:`; render sites (`videoRow`, `imageRow`, `transitionRow`, Track-lane `trackItemBlock`, chain interior render) union-check both bindings via the new helper. Tap behavior is unchanged — taps continue writing to `selectedClipID`; the consumer routes multi-select via `onLongPressClip` + tap-toggle into the set.
+- **`TimelineView.onLongPressClip(_:)`** — modifier; fires on a 0.5s long-press of any media clip with a non-nil `clipID`. Composes with the existing tap via `.simultaneousGesture`. The 10-pt minimum-distance reorder drag (`DragGesture(minimumDistance: 10)`) still takes precedence — long-press fires only when the user holds without dragging. Symmetric across chain + Track lanes via the internal `longPressed(_:id:)` helper.
+- **`TimelineView.clipMatchesSelection(id:single:set:)`** — `nonisolated public static`. The union rule: nil id never matches; otherwise true if `single == id` or `set.contains(id)`. Pure helper; consumers can reuse it for synchronized custom rendering.
+
+### Tests
+
+- 11 new tests: `ClipMatchesSelectionTests` (7) + `MultiSelectAndLongPressModifierTests` (4). Suite: 290 → 301.
+
+### Notes
+
+- **Long-press duration** is fixed at 0.5s (SwiftUI's default). A `minimumDuration:` overload can land in v0.9.x if reels-studio v0.4 manual QA flags the timing.
+- **Long-press on `OverlayHost`** — symmetric surface for overlay multi-select — was discussed and explicitly deferred. Overlays are flat-z-ordered (the Layers sheet shows everything), not lane-positioned, so the use case is weaker. Track if requested.
+- **Multi-select drag reorder** (move an arbitrary subset as one block) is out of scope; kadr's `Video` builder doesn't model "swap these N clips into block X".
+
 ## [0.9.1] - 2026-05-08
 
 Single-surface micro-patch closing a haptic-symmetry gap discovered during `kadr-reels-studio` v0.4 Tier 3 scoping. The v0.4 RFC mistakenly claimed `TimelineView.onClipDragSnap` already shipped in v0.8 (parallel to the `OverlayHost.onLayerTap` errata); verification showed it never did.
