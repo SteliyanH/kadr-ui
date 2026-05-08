@@ -55,6 +55,19 @@ public struct TimelineView: View {
     private let onTrackReorder: ((_ trackIndex: Int, _ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
     private let onTrackTrim: ((_ trackIndex: Int, _ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
 
+    /// When true and `zoom` + `currentTime` are both bound, the timeline scrolls
+    /// content under a viewport-centered playhead instead of letting the
+    /// playhead drift toward the right edge as time advances. Set via the
+    /// ``fixedCenterPlayhead(_:)`` modifier; default false (legacy behavior).
+    /// Added in v0.9.
+    private var fixedCenterPlayheadEnabled: Bool = false
+
+    /// Stable id for the invisible playhead anchor view used by
+    /// ``fixedCenterPlayhead(_:)``. The view itself is positioned at the
+    /// playhead's x inside the scroll content; ``ScrollViewReader.scrollTo`` is
+    /// then called with this id on every `currentTime` change to recenter it.
+    private static let playheadAnchorID = "kadr-ui.playhead-anchor"
+
     /// In-flight pinch baseline. `nil` outside the gesture; captures the
     /// pre-gesture density on first `onChanged` so subsequent updates multiply
     /// from a stable base instead of compounding.
@@ -243,13 +256,79 @@ public struct TimelineView: View {
         .frame(width: totalWidth, alignment: .topLeading)
 
         if zoom != nil {
-            ScrollView(.horizontal, showsIndicators: false) {
-                stack
-            }
-            .gesture(zoomGesture(totalSeconds: totalSeconds))
+            scrollableStack(stack: stack, pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
+                .gesture(zoomGesture(totalSeconds: totalSeconds))
         } else {
             stack
         }
+    }
+
+    /// Wraps `stack` in a `ScrollView`, optionally inside a `ScrollViewReader`
+    /// when ``fixedCenterPlayheadEnabled`` is on so we can anchor an invisible
+    /// view at the playhead and re-emit `scrollTo` on every `currentTime`
+    /// change.
+    @ViewBuilder
+    private func scrollableStack(
+        stack: some View,
+        pxPerSecond: Double,
+        totalSeconds: Double
+    ) -> some View {
+        if fixedCenterPlayheadEnabled, let currentTime, totalSeconds > 0 {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    stack.overlay(alignment: .topLeading) {
+                        // Invisible anchor positioned at the playhead's x.
+                        // Re-emitting scrollTo on every currentTime change
+                        // re-centers it in the viewport.
+                        Color.clear
+                            .frame(width: 1, height: 1)
+                            .offset(
+                                x: CGFloat(CMTimeGetSeconds(currentTime.wrappedValue) * pxPerSecond),
+                                y: 0
+                            )
+                            .id(Self.playheadAnchorID)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .onChange(of: currentTime.wrappedValue) { _ in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo(Self.playheadAnchorID, anchor: .center)
+                    }
+                }
+                .onAppear {
+                    proxy.scrollTo(Self.playheadAnchorID, anchor: .center)
+                }
+            }
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                stack
+            }
+        }
+    }
+
+    /// Anchor the playhead to the horizontal center of the viewport and scroll
+    /// the timeline content under it, instead of letting the playhead drift
+    /// toward the right edge as time advances.
+    ///
+    /// No-op when ``init(_:currentTime:selectedClipID:zoom:...)`` was not given
+    /// `currentTime` — the playhead only renders in that case — or when `zoom`
+    /// was not bound (without zoom there's no scroll view to drive). Manual
+    /// scrolls don't fight the auto-recenter; the modifier only emits
+    /// `scrollTo` when `currentTime` actually changes.
+    ///
+    /// ```swift
+    /// TimelineView(video, currentTime: $time, zoom: $zoom)
+    ///     .fixedCenterPlayhead()
+    /// ```
+    ///
+    /// - Parameter enabled: Pass `false` to opt out without removing the
+    ///   modifier (e.g., gated on a per-project setting).
+    /// - Returns: A copy of the timeline with the modifier applied.
+    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+    public func fixedCenterPlayhead(_ enabled: Bool = true) -> TimelineView {
+        var copy = self
+        copy.fixedCenterPlayheadEnabled = enabled
+        return copy
     }
 
     /// Pinch-to-zoom that mutates the bound `TimelineZoom`. Captures the
