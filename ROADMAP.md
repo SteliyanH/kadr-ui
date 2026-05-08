@@ -69,6 +69,15 @@ Closes the v0.6 deferral list. Built against the existing kadr ≥ 0.10 surface 
 
 Custom `TextAnimation`s round-trip as `.custom` so the picker can clear them but not re-author. Bézier control-handle UX, styled caption authoring, and multi-select on overlays remain deferred (real-but-niche).
 
+## v0.9.0 — Fixed-center playhead + zoom-snap callback *(planned)*
+
+Pure additive, three tiers (one per surface + release prep). Driven by `kadr-reels-studio` v0.4's UX-polish cycle (fixed-center playhead during scrub; snap haptics on pinch-zoom crossings).
+
+- **`TimelineView.fixedCenterPlayhead(_:)`** — anchor the playhead to the viewport center and scroll content under it. Opt-in modifier; no-op when `currentTime` / `zoom` aren't bound.
+- **`TimelineView.onZoomSnap(_:)`** — fires on pinch-zoom crossings of an internal threshold list (frame / second / 5s / 30s). `ZoomSnapThreshold` struct exposes the list for consumers' label / haptic decisions.
+
+`OverlayHost.onLayerTap(_:)` was originally on this cycle's list but ships in v0.8.0 — kadr-reels-studio v0.4 Tier 6 (overlay tap-to-select) wires against the existing surface.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.
