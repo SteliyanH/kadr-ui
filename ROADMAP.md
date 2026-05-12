@@ -101,9 +101,9 @@ Pre-v1.0 cycle absorbing API-shape fixes from a cross-package audit:
 
 kadr floor bumped to ≥ 0.11.0.
 
-## v0.10.1 — Snapshot + gesture test infrastructure *(planned)*
+## v0.10.1 — Snapshot + gesture-wiring test infrastructure ✓ shipped
 
-Additive micro-patch. `swift-snapshot-testing` harness with baselines for every editor view; gesture-driver tests for `onZoomSnap` / `onClipDragSnap` / `onLongPressClip` / pinch-zoom / drag-retime. Same shape as v0.9.1.
+Test-only additions. swift-snapshot-testing + ViewInspector both as test-only deps. 8 visual-regression baselines committed for `TimelineView` / `OverlayHost` / `InspectorPanel`. 9 gesture-wiring smoke tests for `onLongPressClip` / `onZoomSnap` / `onClipDragSnap` / full-composition stacks. Custom `renderForSnapshot(_:size:)` helper bridges SwiftUI → NSImage on macOS where swift-snapshot-testing's `Snapshotting<View, UIImage>` is iOS/tvOS-only. Pure-logic gesture seams (`snapTransition`, `crossings`, `clipMatchesSelection`, `overlayMatchesSelection`) already covered the math; these new tests catch *attachment* regressions.
 
 ## v0.11.0 — Library accessibility sweep *(planned)*
 
@@ -148,6 +148,7 @@ Tracks Kadr v1.0.
 | 0.9.1 | ≥ 0.10.0 |
 | 0.9.2 | ≥ 0.10.0 |
 | 0.10.0 | ≥ 0.11.0 *(uses `Speed` enum / `FilterID` from the kadr v0.11 hardening cycle)* |
+| 0.10.1 | ≥ 0.11.0 |
 | 1.0.0 *(planned)* | ≥ 1.0.0 |
 
 ## Contributing
