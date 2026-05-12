@@ -18,7 +18,8 @@ Snapshot + gesture-wiring test infrastructure. Closes audit items #8 (no snapsho
 
 ### Notes
 
-- **Maintenance contract.** First-run records baselines and fails; commit them and re-run for green. Re-recording after intentional visual changes is `record: true` per-call or globally. Pin CI to the macOS/Xcode version the baselines were recorded against — version drift can produce small pixel differences.
+- **Maintenance contract.** First-run records baselines and fails; commit them and re-run for green. Re-recording after intentional visual changes is `record: true` per-call or globally.
+- **CI behavior.** Snapshot tests **skip on CI** via `XCTSkip` keyed off the `CI` env var. macOS / Xcode version drift between contributor laptops and the GitHub `macos-15` runner produces small pixel differences that fail otherwise-correct rendering. Tests still compile in CI's build step (so they can't bit-rot silently) but only execute locally on the recording toolchain. Override on CI for a deliberate baseline-refresh job with `KADR_UI_FORCE_SNAPSHOTS=1`.
 - **What this can't do.** ViewInspector can walk SwiftUI's modifier tree but can't fire system gestures (pinch / long-press / multi-touch drag) from a unit-test context. Full gesture fidelity stays with manual QA + the snapshot suite. Pure-logic seams (`snapTransition`, `crossings`, `clipMatchesSelection`, `overlayMatchesSelection`) already covered the math; these new tests catch *attachment* regressions.
 - **macOS-only snapshot path.** `SnapshotTests` is `#if os(macOS)`-gated. iOS-target invocations via xcodebuild can adopt the native iOS strategy in a follow-up if needed.
 
