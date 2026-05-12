@@ -842,3 +842,149 @@ extension TimelineView {
 - **Long-press duration tuning.** v0.9.2 ships 0.5s (SwiftUI's `LongPressGesture` default). CapCut feels closer to 0.4s; VN to 0.6s. Defer customization until reels-studio v0.4 manual QA; expose `onLongPressClip(minimumDuration:_:)` overload if the default is wrong.
 - **Multi-select drag reorder.** Today only single clips reorder. Multi-select drag — the gesture moves an arbitrary subset — is a much bigger change (kadr's `Video` builder doesn't model "swap these N clips into block X"). Out of scope; track if reels-studio v0.4+ asks for it.
 - **Long-press on overlays (`OverlayHost`).** Symmetric surface for overlay multi-select. Defer until a real consumer asks — overlays are flat-z-ordered (Layers sheet shows everything), not lane-positioned, so the use case is weaker.
+
+## v0.10.0 — API hardening + overlay multi-select
+
+**Status:** RFC. No code yet.
+
+### Motivation
+
+A cross-package audit before the v1.0 stability commitment surfaced two API-shape issues that should be fixed before v1.0 freezes the surface. Both are breaking; bundle in one cycle so reels-studio v0.6.0 (which floor-bumps kadr-ui) absorbs the migration once.
+
+- **Callback parameter-order landmines.** Every `TimelineView` reorder / trim callback uses positional args of the same primitive types: `onTrim: (Int, CMTime, CMTime)`, `onTrackTrim: (Int, Int, CMTime, CMTime)`, `onReorder: (Int, Int, [any Clip])`. A swap of `leading` / `trailing` or `from` / `to` produces silent nonsense, not a compile error. Refactor-safety is zero at consumer call sites.
+- **Multi-select asymmetry.** v0.9.2 shipped `TimelineView(selectedClipIDs:)` for clip multi-select, but `OverlayHost` is still single-select (`Binding<LayerID?>?`). Consumers building unified multi-select UIs hit the wall immediately. Reels-studio's v0.4 Tier 5 wrap-in-track flow worked around it via the `LayersSheet`, but proper batch overlay edits (opacity / position on N overlays at once) need parity.
+
+A v0.10.1 micro-patch follows for snapshot + gesture test infrastructure.
+
+### Scope lock — v0.10.0
+
+In scope:
+- **Callback payloads as `Sendable` structs.** Replace every positional callback with a single struct argument; the named-field style makes call-site swaps impossible at compile time.
+- **`OverlayHost(selectedLayerIDs:)`** additive `Binding<Set<LayerID>>?` parameter. Coexists with `selectedLayerID`; render sites union-check both via a new `overlayMatchesSelection(id:single:set:)` `nonisolated public static` helper (parallel to v0.9.2's `clipMatchesSelection`).
+- **Default `OverlayHost` size policy** — current 30%×30% placeholder either fixed or explicitly documented as a permanent v1.0 default.
+- **Stale-comment sweep** — `TimelineView` "v0.4.1 read-only" header, `InspectorPanel` pre-v0.8 placeholders, `OverlayHost` "v1 placeholder" note.
+
+Out of scope:
+- Snapshot + gesture test infrastructure — v0.10.1 micro-patch (additive, ships fast).
+- Library-level a11y sweep — v0.11.
+- `@Observable` migration — v0.12 (after iOS 17 floor).
+
+### Public API changes
+
+```swift
+// MARK: - Tier 1: Callback payloads
+
+public struct ClipReorderEvent: Sendable {
+    public let from: Int
+    public let to: Int
+    public let newClips: [any Clip]
+}
+
+public struct ClipTrimEvent: Sendable {
+    public let clipIndex: Int
+    public let leadingTrim: CMTime
+    public let trailingTrim: CMTime
+}
+
+public struct TrackReorderEvent: Sendable {
+    public let trackIndex: Int
+    public let from: Int
+    public let to: Int
+    public let newClips: [any Clip]
+}
+
+public struct TrackTrimEvent: Sendable {
+    public let trackIndex: Int
+    public let clipIndex: Int
+    public let leadingTrim: CMTime
+    public let trailingTrim: CMTime
+}
+
+extension TimelineView {
+    public init(
+        _ video: Video,
+        currentTime: Binding<CMTime>? = nil,
+        selectedClipID: Binding<ClipID?>? = nil,
+        selectedClipIDs: Binding<Set<ClipID>>? = nil,
+        zoom: Binding<TimelineZoom>? = nil,
+        // ... layout params unchanged ...
+        onReorder: ((ClipReorderEvent) -> Void)? = nil,
+        onTrim: ((ClipTrimEvent) -> Void)? = nil,
+        onTrackReorder: ((TrackReorderEvent) -> Void)? = nil,
+        onTrackTrim: ((TrackTrimEvent) -> Void)? = nil
+    )
+}
+```
+
+Old positional-arg init stays as a deprecated overload for one minor; bodies dispatch through the struct form.
+
+```swift
+// MARK: - Tier 2: Overlay multi-select
+
+extension OverlayHost {
+    public init(
+        _ video: Video,
+        currentTime: CMTime = .zero,
+        selectedLayerID: Binding<LayerID?>? = nil,
+        selectedLayerIDs: Binding<Set<LayerID>>? = nil
+    )
+}
+
+@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+extension OverlayHost {
+    public nonisolated static func overlayMatchesSelection(
+        id: LayerID?,
+        single: LayerID?,
+        set: Set<LayerID>?
+    ) -> Bool
+}
+```
+
+`onLayerTap` / `onLayerDrag` semantics unchanged — taps still write to `selectedLayerID`. Consumers handle multi-select toggling the same way reels-studio v0.4 Tier 5 did for clips.
+
+### Tier breakdown
+
+- **Tier 0** *(this PR)* — RFC. No code.
+- **Tier 1** — Callback payload structs + `TimelineView` init refactor + deprecated overload. ~150 LOC + ~12 tests.
+- **Tier 2** — `OverlayHost(selectedLayerIDs:)` + `overlayMatchesSelection` helper. ~60 LOC + ~8 tests.
+- **Tier 3** — `OverlayHost` default-size decision (fix or document) + stale-comment sweep + release prep + tag v0.10.0.
+
+### Test strategy
+
+- **Callback structs:** body smoke per init permutation; field-by-field assertions on the emitted events; deprecated overloads still compile + emit equivalent events.
+- **Overlay multi-select:** `overlayMatchesSelection` table (mirror v0.9.2's `ClipMatchesSelectionTests`); body smoke with both bindings; long-press hook (if added) routes correctly.
+
+Target: ~20 new tests. Suite: 301 → ~321.
+
+### Compatibility
+
+- **Breaking** for `TimelineView` positional-arg callbacks (deprecated overload absorbs the migration window).
+- **Pure additive** for overlay multi-select.
+- **kadr floor** bumped to ≥ 0.11.0 (paired with the kadr v0.11 hardening cycle).
+
+### Open questions
+
+- **Should we backport a `*Event` struct shape to `OverlayHost.onLayerTap` / `onLayerDrag`?** Today they're single-arg (`(LayerID) -> Void` / `(LayerID, CGSize) -> Void`). Defer — single positional arg of a strongly-typed struct isn't a swap landmine. Touch only if a future field surfaces.
+- **Long-press on `OverlayHost`?** RFC for v0.9.2 deferred this. The unified multi-select story now has half a leg (binding) but no driver. If reels-studio v0.6 wants overlay multi-select, it can wire it via the LayersSheet today. v0.10.1 could add `onLongPressOverlay` if a real consumer asks.
+
+## v0.10.1 — Snapshot + gesture test infrastructure *(planned, sketch)*
+
+Additive micro-patch following v0.10.0. Same shape as v0.9.1 / v0.9.2. Three tiers:
+
+1. **`swift-snapshot-testing` harness** — baseline images for `TimelineView`, `KeyframeEditor`, `SpeedCurveEditor`, `OverlayHost`, `InspectorPanel`, `OverlayInspectorPanel`.
+2. **Gesture-driver tests** — `onZoomSnap`, `onClipDragSnap`, `onLongPressClip`, pinch-zoom, drag-retime. ViewInspector or XCUITest-in-package.
+3. **Release prep + tag v0.10.1**.
+
+Closes audit gaps #8 and #9.
+
+## v0.11.0 — Library accessibility sweep *(planned, sketch)*
+
+Parallel to reels-studio v0.5's app sweep, applied to the **library** views every consumer ships. Five tiers:
+
+1. `TimelineView` clip / transition / scrub blocks — labels, values, hints.
+2. `KeyframeEditor` / `OverlayKeyframeEditor` rows — per-property labels, per-marker values.
+3. `SpeedCurveEditor` + Inspector slider values + Dynamic Type pass.
+4. Reduce Motion awareness on internal animations.
+5. Release prep + tag v0.11.0.
+
+Closes audit gap #7.
