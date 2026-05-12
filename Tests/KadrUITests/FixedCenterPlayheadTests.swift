@@ -92,8 +92,8 @@ struct FixedCenterPlayheadTests {
             currentTime: $t,
             selectedClipID: $selected,
             zoom: $zoom,
-            onReorder: { _, _, _ in },
-            onTrim: { _, _, _ in }
+            onReorder: { _ in },
+            onTrim: { _ in }
         )
         .fixedCenterPlayhead()
         .body

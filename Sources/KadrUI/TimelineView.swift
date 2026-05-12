@@ -56,10 +56,13 @@ public struct TimelineView: View {
     private let showAudioLanes: Bool
     private let showAudioWaveforms: Bool
     private let showLaneLabels: Bool
-    private let onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
-    private let onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
-    private let onTrackReorder: ((_ trackIndex: Int, _ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?
-    private let onTrackTrim: ((_ trackIndex: Int, _ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)?
+    /// Internal storage uses the v0.10 event-struct callback shape. The
+    /// deprecated positional-arg init (kept for one minor) wraps its old-
+    /// style closures into event-emitting ones at the init layer.
+    private let onReorder: ((ClipReorderEvent) -> Void)?
+    private let onTrim: ((ClipTrimEvent) -> Void)?
+    private let onTrackReorder: ((TrackReorderEvent) -> Void)?
+    private let onTrackTrim: ((TrackTrimEvent) -> Void)?
 
     /// When true and `zoom` + `currentTime` are both bound, the timeline scrolls
     /// content under a viewport-centered playhead instead of letting the
@@ -201,10 +204,10 @@ public struct TimelineView: View {
         showAudioLanes: Bool = true,
         showAudioWaveforms: Bool = false,
         showLaneLabels: Bool = false,
-        onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
-        onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil,
-        onTrackReorder: ((_ trackIndex: Int, _ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
-        onTrackTrim: ((_ trackIndex: Int, _ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
+        onReorder: ((ClipReorderEvent) -> Void)? = nil,
+        onTrim: ((ClipTrimEvent) -> Void)? = nil,
+        onTrackReorder: ((TrackReorderEvent) -> Void)? = nil,
+        onTrackTrim: ((TrackTrimEvent) -> Void)? = nil
     ) {
         self.video = video
         self.currentTime = currentTime
@@ -220,6 +223,60 @@ public struct TimelineView: View {
         self.onTrim = onTrim
         self.onTrackReorder = onTrackReorder
         self.onTrackTrim = onTrackTrim
+    }
+
+    /// Legacy positional-arg init kept for one minor (removal target v0.11).
+    /// Wraps each positional-arg closure into a `*Event`-emitting closure
+    /// before storing — the engine internally uses the v0.10 event shape.
+    ///
+    /// Migration: replace positional-arg closures with event-struct
+    /// closures, e.g.:
+    /// ```swift
+    /// .init(..., onReorder: { event in /* event.from, event.to, event.newClips */ })
+    /// ```
+    @available(*, deprecated, message: "Use the event-struct overload — TimelineView(_, onReorder: (ClipReorderEvent) -> Void, ...) — to eliminate parameter-swap landmines on positional-arg closures. Removal target: v0.11.")
+    public init(
+        _ video: Video,
+        currentTime: Binding<CMTime>? = nil,
+        selectedClipID: Binding<ClipID?>? = nil,
+        selectedClipIDs: Binding<Set<ClipID>>? = nil,
+        zoom: Binding<TimelineZoom>? = nil,
+        laneHeight: CGFloat = 40,
+        laneSpacing: CGFloat = 4,
+        showAudioLanes: Bool = true,
+        showAudioWaveforms: Bool = false,
+        showLaneLabels: Bool = false,
+        // No `= nil` defaults — disambiguates from the event-struct init at
+        // call sites passing no callbacks (which only match the new shape).
+        onReorder: ((_ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)?,
+        onTrim: ((_ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil,
+        onTrackReorder: ((_ trackIndex: Int, _ from: Int, _ to: Int, _ newClips: [any Clip]) -> Void)? = nil,
+        onTrackTrim: ((_ trackIndex: Int, _ clipIndex: Int, _ leadingTrim: CMTime, _ trailingTrim: CMTime) -> Void)? = nil
+    ) {
+        self.init(
+            video,
+            currentTime: currentTime,
+            selectedClipID: selectedClipID,
+            selectedClipIDs: selectedClipIDs,
+            zoom: zoom,
+            laneHeight: laneHeight,
+            laneSpacing: laneSpacing,
+            showAudioLanes: showAudioLanes,
+            showAudioWaveforms: showAudioWaveforms,
+            showLaneLabels: showLaneLabels,
+            onReorder: onReorder.map { closure in
+                { event in closure(event.from, event.to, event.newClips) }
+            },
+            onTrim: onTrim.map { closure in
+                { event in closure(event.clipIndex, event.leadingTrim, event.trailingTrim) }
+            },
+            onTrackReorder: onTrackReorder.map { closure in
+                { event in closure(event.trackIndex, event.from, event.to, event.newClips) }
+            },
+            onTrackTrim: onTrackTrim.map { closure in
+                { event in closure(event.trackIndex, event.clipIndex, event.leadingTrim, event.trailingTrim) }
+            }
+        )
     }
 
     public var body: some View {
@@ -831,7 +888,7 @@ public struct TimelineView: View {
                     pixelDelta: value.translation.width,
                     pxPerSecond: pxPerSecond
                 )
-                onTrackTrim?(key.trackIndex, key.clipIndex, leading, trailing)
+                onTrackTrim?(TrackTrimEvent(trackIndex: key.trackIndex, clipIndex: key.clipIndex, leadingTrim: leading, trailingTrim: trailing))
             }
     }
 
@@ -921,7 +978,7 @@ public struct TimelineView: View {
             from: sourceIndex,
             to: rawTarget
         ) else { return }
-        onTrackReorder?(trackIndex, sourceIndex, result.targetIndex, newClips)
+        onTrackReorder?(TrackReorderEvent(trackIndex: trackIndex, from: sourceIndex, to: result.targetIndex, newClips: newClips))
     }
 
     /// Original index in `video.clips` of the Track at Track-only ordinal `trackIndex`.
@@ -1259,7 +1316,7 @@ public struct TimelineView: View {
                     pixelDelta: value.translation.width,
                     pxPerSecond: pxPerSecond
                 )
-                onTrim?(index, leading, trailing)
+                onTrim?(ClipTrimEvent(clipIndex: index, leadingTrim: leading, trailingTrim: trailing))
             }
     }
 
@@ -1342,7 +1399,7 @@ public struct TimelineView: View {
         let newSourceOriginalIdx = newChain.indices.contains(result.chainTargetIndex)
             ? newChain[result.chainTargetIndex]
             : sourceIndex
-        onReorder?(sourceIndex, newSourceOriginalIdx, result.newClips)
+        onReorder?(ClipReorderEvent(from: sourceIndex, to: newSourceOriginalIdx, newClips: result.newClips))
     }
 
     /// Pure: which slot does the dragged clip's center lie over after `dragX` pixels of

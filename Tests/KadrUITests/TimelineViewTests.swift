@@ -78,8 +78,8 @@ struct TimelineViewTests {
         }
         _ = TimelineView(
             v,
-            onReorder: { _, _, _ in },
-            onTrim: { _, _, _ in }
+            onReorder: { _ in },
+            onTrim: { _ in }
         ).body
     }
 
@@ -163,7 +163,7 @@ struct TimelineViewTests {
             ImageClip(img, duration: 1.0).id("a")
             ImageClip(img, duration: 2.0).id("b")
         }
-        _ = TimelineView(video, onReorder: { _, _, _ in }).body
+        _ = TimelineView(video, onReorder: { _ in }).body
     }
 
     @Test @MainActor func constructsWithTrackReorderCallback() {
@@ -175,7 +175,7 @@ struct TimelineViewTests {
                 ImageClip(img, duration: 2.0).id("b")
             }
         }
-        _ = TimelineView(video, onTrackReorder: { _, _, _, _ in }).body
+        _ = TimelineView(video, onTrackReorder: { _ in }).body
     }
 
     @Test @MainActor func constructsWithTrackTrimCallback() {
@@ -186,7 +186,7 @@ struct TimelineViewTests {
                 ImageClip(img, duration: 1.0).id("a")
             }
         }
-        _ = TimelineView(video, onTrackTrim: { _, _, _, _ in }).body
+        _ = TimelineView(video, onTrackTrim: { _ in }).body
     }
 
     // MARK: - Reorder math: computeTargetIndex
@@ -299,7 +299,7 @@ struct TimelineViewTests {
         let video = Video {
             ImageClip(img, duration: 2.0).id("a")
         }
-        _ = TimelineView(video, onTrim: { _, _, _ in }).body
+        _ = TimelineView(video, onTrim: { _ in }).body
     }
 
     // MARK: - Trim math: computeTrimDeltas

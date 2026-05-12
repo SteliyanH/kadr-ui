@@ -99,7 +99,7 @@ struct MultiSelectAndLongPressModifierTests {
             selectedClipID: $single,
             selectedClipIDs: $multi,
             zoom: $zoom,
-            onReorder: { _, _, _ in }
+            onReorder: { _ in }
         )
         .fixedCenterPlayhead()
         .onZoomSnap { _ in }
