@@ -4,6 +4,37 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.1] - 2026-05-12
+
+Snapshot + gesture-wiring test infrastructure. Closes audit items #8 (no snapshot harness) and #9 (gesture paths unit-test-deserts). The library's existing 323-test suite was strong on pure logic but had no regression guard against visual drift or modifier-attachment refactors. v0.10.1 adds both.
+
+### Added (test infrastructure)
+
+- **swift-snapshot-testing** as a test-only dependency. Baselines committed under `Tests/KadrUITests/__Snapshots__/SnapshotTests/`.
+- **Custom macOS SwiftUI → NSImage helper** (`renderForSnapshot(_:size:)`). swift-snapshot-testing ships `Snapshotting<SwiftUI.View, UIImage>.image(layout:)` for iOS / tvOS only; macOS requires a custom path via `NSHostingController` → `NSBitmapImageRep`. Documented in `SnapshotStrategy+macOSSwiftUI.swift`.
+- **8 visual-regression snapshots** across `TimelineView` (base / playhead / single-select / multi-select), `OverlayHost` (base / single-select / multi-select), and `InspectorPanel` (empty selection).
+- **ViewInspector** as a test-only dependency for modifier-tree inspection.
+- **9 gesture-wiring smoke tests** that verify each gesture surface attaches without throwing — `onLongPressClip`, `onZoomSnap`, `onClipDragSnap`, plus the v0.10 full-composition stack and `OverlayHost`'s tap-binding paths. Behavioral tap-to-deselect logic is exercised via direct binding manipulation (the same write the tap handler performs).
+
+### Notes
+
+- **Maintenance contract.** First-run records baselines and fails; commit them and re-run for green. Re-recording after intentional visual changes is `record: true` per-call or globally.
+- **CI behavior.** Snapshot tests **skip on CI** via `XCTSkip` keyed off the `CI` env var. macOS / Xcode version drift between contributor laptops and the GitHub `macos-15` runner produces small pixel differences that fail otherwise-correct rendering. Tests still compile in CI's build step (so they can't bit-rot silently) but only execute locally on the recording toolchain. Override on CI for a deliberate baseline-refresh job with `KADR_UI_FORCE_SNAPSHOTS=1`.
+- **What this can't do.** ViewInspector can walk SwiftUI's modifier tree but can't fire system gestures (pinch / long-press / multi-touch drag) from a unit-test context. Full gesture fidelity stays with manual QA + the snapshot suite. Pure-logic seams (`snapTransition`, `crossings`, `clipMatchesSelection`, `overlayMatchesSelection`) already covered the math; these new tests catch *attachment* regressions.
+- **macOS-only snapshot path.** `SnapshotTests` is `#if os(macOS)`-gated. iOS-target invocations via xcodebuild can adopt the native iOS strategy in a follow-up if needed.
+
+### Tests
+
+- Snapshot suite: 8 tests, 8 PNG baselines committed.
+- Gesture-wiring suite: 9 tests.
+
+### Dependencies (test-only)
+
+- **swift-snapshot-testing** ≥ 1.18.0
+- **ViewInspector** ≥ 0.10.0
+
+Main library has no third-party dependencies; kadr floor unchanged at ≥ 0.11.0.
+
 ## [0.10.0] - 2026-05-12
 
 API hardening cycle. Closes two API-shape issues flagged in a cross-package audit before the v1.0 stability commitment: positional-arg callback closures (every same-type pair a swap landmine) and asymmetric multi-select between `TimelineView` and `OverlayHost`. Bundle now so `kadr-reels-studio` v0.6.0 migrates once.
