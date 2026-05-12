@@ -63,7 +63,7 @@ struct OnClipDragSnapTests {
     }
 
     @Test @MainActor func constructsWithModifierAttached() {
-        _ = TimelineView(sampleVideo(), onReorder: { _, _, _ in })
+        _ = TimelineView(sampleVideo(), onReorder: { _ in })
             .onClipDragSnap {}
             .body
     }
@@ -75,8 +75,8 @@ struct OnClipDragSnapTests {
             sampleVideo(),
             currentTime: $t,
             zoom: $zoom,
-            onReorder: { _, _, _ in },
-            onTrackReorder: { _, _, _, _ in }
+            onReorder: { _ in },
+            onTrackReorder: { _ in }
         )
         .fixedCenterPlayhead()
         .onZoomSnap { _ in }
