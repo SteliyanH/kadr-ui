@@ -65,6 +65,18 @@ public struct OverlayHost: View {
     private var onDragChangedHandler: ((LayerID, CGSize) -> Void)?
     private var onDragEndedHandler: ((LayerID, CGSize) -> Void)?
 
+    /// Optional binding for single-overlay selection. When bound, tapping
+    /// an overlay writes its `LayerID` here. Render sites union-check
+    /// against ``selectedLayerIDs`` via ``overlayMatchesSelection(id:single:set:)``
+    /// and draw a selection ring on every matching overlay. Added in v0.10.
+    private let selectedLayerID: Binding<LayerID?>?
+
+    /// Optional binding for multi-overlay selection. Coexists with
+    /// ``selectedLayerID``; render sites union-check both bindings. The
+    /// consumer manages set membership (taps don't auto-toggle membership —
+    /// taps write the single binding instead). Added in v0.10.
+    private let selectedLayerIDs: Binding<Set<LayerID>>?
+
     /// Create an overlay host for `video`.
     /// - Parameters:
     ///   - video: The Kadr composition whose ``Kadr/Video/overlays`` are rendered.
@@ -80,11 +92,15 @@ public struct OverlayHost: View {
         _ video: Video,
         contentMode: ContentMode = .fit,
         currentTime: CMTime? = nil,
+        selectedLayerID: Binding<LayerID?>? = nil,
+        selectedLayerIDs: Binding<Set<LayerID>>? = nil,
         customRenderer: ((any Overlay) -> AnyView?)? = nil
     ) {
         self.video = video
         self.contentMode = contentMode
         self.currentTime = currentTime
+        self.selectedLayerID = selectedLayerID
+        self.selectedLayerIDs = selectedLayerIDs
         self.customRenderer = customRenderer
     }
 
@@ -114,14 +130,37 @@ public struct OverlayHost: View {
     private func overlayView(for overlay: any Overlay, in containerSize: CGSize) -> some View {
         let frame = computeFrame(for: overlay, in: containerSize)
         let resolved = customRenderer?(overlay) ?? defaultView(for: overlay)
+        let isSelected = OverlayHost.overlayMatchesSelection(
+            id: overlay.layerID,
+            single: selectedLayerID?.wrappedValue,
+            set: selectedLayerIDs?.wrappedValue
+        )
         let visual = resolved
             .frame(width: frame.width, height: frame.height)
             .opacity(overlay.opacity)
+            // v0.10 — selection ring matches TimelineView's clip-selection
+            // visual: white stroke, 2pt, slight corner radius. Rendered
+            // outside the opacity so the ring stays fully visible even
+            // when the overlay itself is partially transparent.
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
+            )
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
 
         Group {
             if let id = overlay.layerID, hasAnyGestureHandler {
                 visual
-                    .onTapGesture { onTapHandler?(id) }
+                    .onTapGesture {
+                        // v0.10 — when `selectedLayerID` is bound, tapping
+                        // writes the id (matching TimelineView's pattern).
+                        // Tapping the already-selected overlay clears it,
+                        // mirroring chain-clip tap-to-deselect.
+                        if let binding = selectedLayerID {
+                            binding.wrappedValue = (binding.wrappedValue == id) ? nil : id
+                        }
+                        onTapHandler?(id)
+                    }
                     .gesture(
                         DragGesture(minimumDistance: 5)
                             .onChanged { value in
@@ -139,7 +178,25 @@ public struct OverlayHost: View {
     }
 
     private var hasAnyGestureHandler: Bool {
-        onTapHandler != nil || onDragChangedHandler != nil || onDragEndedHandler != nil
+        onTapHandler != nil || onDragChangedHandler != nil ||
+        onDragEndedHandler != nil || selectedLayerID != nil
+    }
+
+    /// Whether an overlay with `id` should render as selected, given the
+    /// union of the single-binding and set-binding selection state. Used
+    /// by ``overlayView(for:in:)`` so the rule has a single seam.
+    ///
+    /// Mirrors v0.9.2's ``TimelineView/clipMatchesSelection(id:single:set:)``.
+    /// `nonisolated` for testability.
+    public nonisolated static func overlayMatchesSelection(
+        id: LayerID?,
+        single: LayerID?,
+        set: Set<LayerID>?
+    ) -> Bool {
+        guard let id else { return false }
+        if single == id { return true }
+        if let set, set.contains(id) { return true }
+        return false
     }
 
     private func computeFrame(for overlay: any Overlay, in containerSize: CGSize) -> CGRect {
