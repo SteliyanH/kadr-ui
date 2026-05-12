@@ -91,6 +91,29 @@ Two-surface micro-patch driven by `kadr-reels-studio` v0.4 Tier 5 (Track creatio
 
 Pure additive. Same shape as v0.9.1's micro-patch.
 
+## v0.10.0 — API hardening + overlay multi-select *(planned)*
+
+Pre-v1.0 cycle absorbing two breaking-but-necessary fixes from a cross-package audit:
+
+- **Callback payload structs** — every `TimelineView` reorder / trim callback collapses positional args into a `Sendable` event struct. Eliminates the parameter-swap landmines on `(Int, CMTime, CMTime)`-style surfaces.
+- **`OverlayHost(selectedLayerIDs:)`** — additive `Binding<Set<LayerID>>?` parameter; render sites union-check both bindings via a new `overlayMatchesSelection(id:single:set:)` helper. Parity with v0.9.2's clip multi-select.
+
+Plus the `OverlayHost` 30%×30% default-size placeholder decision and a stale-comment sweep.
+
+kadr floor bumped to ≥ 0.11.0.
+
+## v0.10.1 — Snapshot + gesture test infrastructure *(planned)*
+
+Additive micro-patch. `swift-snapshot-testing` harness with baselines for every editor view; gesture-driver tests for `onZoomSnap` / `onClipDragSnap` / `onLongPressClip` / pinch-zoom / drag-retime. Same shape as v0.9.1.
+
+## v0.11.0 — Library accessibility sweep *(planned)*
+
+`.accessibilityLabel` / `.accessibilityHint` / `.accessibilityValue` across every interactive surface inside the library (consumers shouldn't be more accessible than the views they're built on). Dynamic Type + Reduce Motion. Five tiers.
+
+## v0.12.0 — `@Observable` migration *(planned)*
+
+Triggered when the iOS 17 floor moves (paired with reels-studio v0.8). Internal `ObservableObject` → `@Observable`; mechanical.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.
