@@ -91,14 +91,13 @@ Two-surface micro-patch driven by `kadr-reels-studio` v0.4 Tier 5 (Track creatio
 
 Pure additive. Same shape as v0.9.1's micro-patch.
 
-## v0.10.0 — API hardening + overlay multi-select *(planned)*
+## v0.10.0 — API hardening + overlay multi-select ✓ shipped
 
-Pre-v1.0 cycle absorbing two breaking-but-necessary fixes from a cross-package audit:
+Pre-v1.0 cycle absorbing API-shape fixes from a cross-package audit:
 
-- **Callback payload structs** — every `TimelineView` reorder / trim callback collapses positional args into a `Sendable` event struct. Eliminates the parameter-swap landmines on `(Int, CMTime, CMTime)`-style surfaces.
-- **`OverlayHost(selectedLayerIDs:)`** — additive `Binding<Set<LayerID>>?` parameter; render sites union-check both bindings via a new `overlayMatchesSelection(id:single:set:)` helper. Parity with v0.9.2's clip multi-select.
-
-Plus the `OverlayHost` 30%×30% default-size placeholder decision and a stale-comment sweep.
+- **`Sendable` event-struct callbacks** on `TimelineView` (`ClipReorderEvent` / `ClipTrimEvent` / `TrackReorderEvent` / `TrackTrimEvent`). Replaces positional-arg closures where every same-type pair was a swap landmine. Deprecated positional-arg init kept for one minor (removal target v0.11).
+- **`OverlayHost` selection bindings + selection ring** — went full scope on discovery that `OverlayHost` had no selection binding at all pre-v0.10. New `selectedLayerID` + `selectedLayerIDs` parameters, white 2pt selection ring matching `TimelineView`'s clip ring, tap-writes-binding + tap-to-deselect, `.isSelected` accessibility trait. `overlayMatchesSelection(id:single:set:)` helper parallel to v0.9.2's `clipMatchesSelection`.
+- `OverlayHost` 30%×30% default-size committed (drops "v1 placeholder" framing). `TimelineView` header refreshed to describe the v0.9.2 gesture surface.
 
 kadr floor bumped to ≥ 0.11.0.
 
@@ -148,6 +147,7 @@ Tracks Kadr v1.0.
 | 0.9.0 | ≥ 0.10.0 |
 | 0.9.1 | ≥ 0.10.0 |
 | 0.9.2 | ≥ 0.10.0 |
+| 0.10.0 | ≥ 0.11.0 *(uses `Speed` enum / `FilterID` from the kadr v0.11 hardening cycle)* |
 | 1.0.0 *(planned)* | ≥ 1.0.0 |
 
 ## Contributing

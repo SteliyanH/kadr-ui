@@ -26,11 +26,13 @@ import Kadr
 /// the resolved durations. Until each load completes the corresponding clip renders at
 /// zero width.
 ///
-/// **Read-only.** This v0.4.1 PR ships the read-only timeline. Selection, drag-to-reorder,
-/// and trim handles arrive in subsequent PRs as pure callbacks (Kadr's `Video` is
-/// immutable; the timeline surfaces user intent — consumers rebuild the `Video`).
+/// **Gesture surface.** Selection, drag-to-reorder, trim handles, pinch-zoom, and
+/// long-press are exposed as opt-in callbacks — Kadr's `Video` is immutable, so the
+/// timeline surfaces user intent (`ClipReorderEvent`, `ClipTrimEvent`, `TrackReorderEvent`,
+/// `TrackTrimEvent`, `onClipDragSnap`, `onZoomSnap`, `onLongPressClip`) and the
+/// consumer rebuilds the `Video`.
 ///
-/// **Multi-lane (v0.5+).** When the composition has Kadr 0.6 multi-track content
+/// **Multi-lane.** When the composition has Kadr 0.6+ multi-track content
 /// (``Kadr/Track`` blocks or clips pinned with `.at(time:)`), the timeline switches to
 /// a stacked-lane render: lane 0 is the implicit chain, then one lane per `Track` in
 /// declaration order, then greedy-packed rows of free-floaters, then optional audio

@@ -102,7 +102,7 @@ The previous `Examples/SimpleViewer/` snippet has been removed in favor of the s
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.9.2 `TimelineView` multi-select + `onLongPressClip` micro-patches on top of v0.9's `fixedCenterPlayhead` + `onZoomSnap`; next: v1.0 stability — DocC tutorials, snapshot tests), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.10.0 API hardening — `Sendable` event-struct callbacks on `TimelineView`, `OverlayHost` multi-select bindings + selection ring; next: v0.10.1 snapshot + gesture-driver test infrastructure, then v0.11 library-level accessibility sweep), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
 
 ## License
 
