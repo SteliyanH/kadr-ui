@@ -38,9 +38,10 @@ import CoreMedia
 /// untimed composition).
 ///
 /// **Overlays without explicit `size`.** Kadr's `Overlay.size` is optional. When `nil`,
-/// `OverlayHost` uses a default frame of 30% × 30% of the canvas as a v1 placeholder.
-/// This may not match the export — set `.size(...)` explicitly on the overlay if pixel
-/// alignment matters in preview.
+/// `OverlayHost` renders the overlay at a default 30% × 30% of the canvas — convenient
+/// for quick-add UX where the consumer hasn't sized the overlay yet, but **not** a
+/// guaranteed match against export rendering. Set `.size(...)` explicitly on the
+/// overlay if pixel alignment in preview matters.
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct OverlayHost: View {
 

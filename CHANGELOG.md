@@ -4,6 +4,42 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-05-12
+
+API hardening cycle. Closes two API-shape issues flagged in a cross-package audit before the v1.0 stability commitment: positional-arg callback closures (every same-type pair a swap landmine) and asymmetric multi-select between `TimelineView` and `OverlayHost`. Bundle now so `kadr-reels-studio` v0.6.0 migrates once.
+
+### Added
+
+- **Sendable event-struct callbacks** on `TimelineView` — `ClipReorderEvent`, `ClipTrimEvent`, `TrackReorderEvent`, `TrackTrimEvent`. Replace the positional-arg closure shapes that gave silent swaps. New init takes `(ClipReorderEvent) -> Void`-style callbacks; deprecated positional-arg init wraps them for one minor.
+- **`OverlayHost` selection bindings + selection ring** — new `selectedLayerID: Binding<LayerID?>?` and `selectedLayerIDs: Binding<Set<LayerID>>?` init parameters. Tap writes to `selectedLayerID` when bound (mirrors `TimelineView`'s clip-tap pattern); tapping the already-selected overlay clears it. Matching overlays render a white 2pt stroke ring drawn outside the `.opacity()` modifier so the ring stays visible on transparent overlays. `.accessibilityAddTraits(.isSelected)` for VoiceOver.
+- **`OverlayHost.overlayMatchesSelection(id:single:set:)`** — `nonisolated public static` helper. Mirror of v0.9.2's `TimelineView.clipMatchesSelection`; same union rule (nil id never matches; otherwise true if `single == id` or `set.contains(id)`).
+
+### Deprecated (removal target v0.11)
+
+- `TimelineView.init(_:, onReorder: ((Int, Int, [any Clip]) -> Void)?, ...)` — positional-arg closure overload. Migrate to `onReorder: ((ClipReorderEvent) -> Void)?`. Disambiguator: the deprecated init's `onReorder` parameter has no `= nil` default, so call sites passing no callbacks match only the new init.
+
+### Changed
+
+- **`OverlayHost` default-size committed.** Sizeless overlays render at 30% × 30% of the canvas — confirmed as the v1.0 behavior (was previously marked "v1 placeholder"). Consumers needing pixel alignment in preview must set `.size(...)` explicitly.
+
+### Internal
+
+- Stale `v0.4.1 read-only` framing removed from `TimelineView` header; replaced with a description of the current gesture surface (selection / reorder / trim / zoom / long-press all opt-in callbacks).
+- Internal storage of `TimelineView` reorder / trim callbacks switched to event-based; four gesture-side fire sites construct events instead of unpacking positional args.
+
+### Tests
+
+- 22 new tests across the cycle: `CallbackEventStructsTests` (9), `OverlayMatchesSelectionTests` (7), `OverlayHostSelectionBindingsTests` (6). Internal test call sites migrated from positional-arg closures (`{ _, _, _ in }`) to event-struct closures (`{ _ in }`) across `FixedCenterPlayheadTests`, `TimelineViewTests`, `OnClipDragSnapTests`, `MultiSelectAndLongPressTests`. Suite 301 → 323.
+
+### Dependencies
+
+- **kadr ≥ 0.11.0** (up from 0.10.0). Paired with the kadr v0.11 hardening cycle.
+
+### Notes
+
+- The `OverlayHost` selection-ring visual mirrors `TimelineView`'s clip-selection ring (white, 2pt, 4pt corner radius) for cross-surface consistency. Snapshot tests for visual fidelity are queued for v0.10.1.
+- Tap-to-deselect on a matched overlay clears `selectedLayerID` (matches `TimelineView`'s chain-clip behavior). Multi-select toggling is the consumer's responsibility — the bindings are reads + a single-id write; consumers route taps into set membership via `onLayerTap` if they want CapCut-style multi-tap selection.
+
 ## [0.9.2] - 2026-05-08
 
 Two-surface micro-patch driving `kadr-reels-studio` v0.4 Tier 5 (Track creation UI — "wrap selection in track"). Same shape as v0.9.1's micro-patch.
