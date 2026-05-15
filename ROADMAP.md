@@ -105,6 +105,16 @@ kadr floor bumped to ≥ 0.11.0.
 
 Test-only additions. swift-snapshot-testing + ViewInspector both as test-only deps. 8 visual-regression baselines committed for `TimelineView` / `OverlayHost` / `InspectorPanel`. 9 gesture-wiring smoke tests for `onLongPressClip` / `onZoomSnap` / `onClipDragSnap` / full-composition stacks. Custom `renderForSnapshot(_:size:)` helper bridges SwiftUI → NSImage on macOS where swift-snapshot-testing's `Snapshotting<View, UIImage>` is iOS/tvOS-only. Pure-logic gesture seams (`snapTransition`, `crossings`, `clipMatchesSelection`, `overlayMatchesSelection`) already covered the math; these new tests catch *attachment* regressions.
 
+## v0.10.2 — Audio trim handles *(planned)*
+
+`TimelineView`'s audio rows already render waveform peaks (v0.6 `showAudioWaveforms`) — the visual surface is done. v0.10.2 adds the gesture surface: leading + trailing trim drag handles on each `AudioTrack` row, mirroring the existing handles on video clips and Track-internal clips. Patch cycle:
+
+- `AudioTrimEvent` Sendable payload (trackIndex + leadingTrim + trailingTrim CMTimes), mirroring `TrackTrimEvent` shape.
+- `TimelineView.onAudioTrim(_:)` modifier — single callback, same shape as `onTrackTrim`.
+- Drag-handle rendering on each audio lane row. Reuses video-clip handle visual + snap haptics.
+
+~150 LOC + ~10 tests. Pairs with **reels-studio v0.7 Tier 1** which wires the callback to `ProjectStore.applyMusicTrim` / `applySFXTrim`.
+
 ## v0.11.0 — Library accessibility sweep *(planned)*
 
 `.accessibilityLabel` / `.accessibilityHint` / `.accessibilityValue` across every interactive surface inside the library (consumers shouldn't be more accessible than the views they're built on). Dynamic Type + Reduce Motion. Five tiers.
