@@ -71,6 +71,19 @@ struct CallbackEventStructsTests {
         #expect(event.trailingTrim.seconds == 1.0)
     }
 
+    @Test func audioTrimEventCarriesIndexAndDeltas() {
+        // v0.10.2 — single-shape struct mirroring TrackTrimEvent without the
+        // clipIndex (audio rows have no inner array — each row IS the unit).
+        let event = AudioTrimEvent(
+            trackIndex: 3,
+            leadingTrim: CMTime(seconds: 0.25, preferredTimescale: 600),
+            trailingTrim: CMTime(seconds: -1.5, preferredTimescale: 600)
+        )
+        #expect(event.trackIndex == 3)
+        #expect(event.leadingTrim.seconds == 0.25)
+        #expect(event.trailingTrim.seconds == -1.5)
+    }
+
     // MARK: - Sendable conformance
 
     /// Every event struct is `Sendable` so it can cross actor boundaries

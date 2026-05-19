@@ -61,6 +61,15 @@ final class GestureWiringTests: XCTestCase {
         XCTAssertNoThrow(try view.inspect())
     }
 
+    /// v0.10.2 — `onAudioTrim` attaches without conflicting with any of the
+    /// existing trim / reorder gestures. Smoke-only; the actual handle drag
+    /// is system-simulated in QA.
+    func testTimelineViewWithAudioTrimBuilds() throws {
+        let view = TimelineView(sampleVideo(), showAudioWaveforms: true)
+            .onAudioTrim { _ in }
+        XCTAssertNoThrow(try view.inspect())
+    }
+
     /// All v0.9 + v0.9.1 + v0.9.2 + v0.10 surfaces composed at once —
     /// stress test for the worst-case stack a reels-studio call site will
     /// build today.
