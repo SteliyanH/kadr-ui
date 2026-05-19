@@ -988,3 +988,67 @@ Parallel to reels-studio v0.5's app sweep, applied to the **library** views ever
 5. Release prep + tag v0.11.0.
 
 Closes audit gap #7.
+
+## v0.10.2 — Audio trim handles *(planned)*
+
+**Status:** RFC. No code yet.
+
+### Motivation
+
+`TimelineView`'s audio rows already render waveform peaks (via `showAudioWaveforms`) since v0.6 — the *visual* surface is done. What's missing is the *gesture surface*: leading + trailing trim drag handles on each `AudioTrack` row, mirroring the existing handles on video clips and Track-internal clips.
+
+Consumers can already trim audio programmatically through kadr's `AudioTrack.at(time:)` / `.duration(_:)` modifiers; what they can't do is wire a drag gesture to those modifiers from a TimelineView callback. Reels Studio v0.7 Tier 1 needs this surface to let users trim background music with a finger.
+
+Patch cycle, not a minor — the addition is one Sendable event struct + one modifier, mirroring `TrackTrimEvent` + `onTrackTrim(_:)`.
+
+### Scope lock — v0.10.2
+
+In scope:
+- **`AudioTrimEvent` Sendable struct** — payload mirroring `TrackTrimEvent` shape:
+  ```swift
+  public struct AudioTrimEvent: Sendable {
+      /// Index into the host `Video`'s top-level audio track array.
+      public let trackIndex: Int
+      /// Leading-edge trim delta (CMTime).
+      public let leadingTrim: CMTime
+      /// Trailing-edge trim delta (CMTime).
+      public let trailingTrim: CMTime
+  }
+  ```
+- **`TimelineView.onAudioTrim(_:)` modifier** — single callback fired on gesture commit. Same callback shape as `onTrackTrim`. Default nil = audio rows render but don't accept the trim gesture (today's behavior).
+- **Drag-handle rendering** on each `AudioTrack` lane row. Reuses the existing handle visual from the video-clip rows; the gesture path needs an audio-track-specific recogniser because the host coordinate space differs (single-row lane vs. multi-row Track).
+
+Out of scope:
+- **Audio scrubbing** (drag-through-row → seek). A separate `onAudioScrub` callback was sketched in the reels-studio v0.7 RFC; pull into v0.10.3 if needed, not v0.10.2.
+- **Per-track volume scrubbing** (vertical drag on the row body). Inspector-panel surface, not timeline.
+- **Crossfade-region direct manipulation.** v0.11 candidate.
+
+### Surface
+
+```swift
+extension TimelineView {
+    public func onAudioTrim(_ handler: ((AudioTrimEvent) -> Void)?) -> TimelineView
+}
+```
+
+Internal: `AudioLane` (or whatever `TimelineLanes.swift` ends up calling it post-Tier 1 implementation) routes its drag-end recogniser through this callback. Same haptic / snap semantics as the video-clip trim handles already use.
+
+### Tier breakdown
+
+Single-tier patch — too small to split.
+
+- Add `AudioTrimEvent` to `TimelineEvents.swift` (alongside `ClipTrimEvent` / `TrackTrimEvent`).
+- Add `onAudioTrim(_:)` modifier on `TimelineView`.
+- Wire the drag recogniser inside the audio-row rendering path. Reuse the existing handle visual + snap haptics from the video clip path.
+- Tests: gesture-wiring smoke (modifier attached survives `.inspect()`), pure-helper tests for delta calculation, snapshot baseline for the row-with-handles render (consistent with the existing `TimelineView` snapshot test in v0.10.1's harness).
+
+~150 LOC + ~10 tests.
+
+### Pairs with
+
+**reels-studio v0.7 Tier 1** which wires the callback to `ProjectStore.applyMusicTrim(_:)` / `applySFXTrim(_:)` mutations. The reels-studio cycle blocks on this patch shipping first.
+
+### Risks
+
+- **Gesture conflict with timeline pan.** The trim drag has to start inside the handle hot-zone — pan-to-scroll has to win when the drag begins outside it. Existing video-clip handles already solved this; we follow the same pattern.
+- **`AudioTrack.explicitDuration` vs. asset-duration ambiguity.** Trimming an audio track whose duration is implicit (no `.duration(_:)` call) requires us to either (a) resolve the asset duration synchronously, or (b) emit `leadingTrim` / `trailingTrim` as relative deltas and let the consumer reconcile. We go with (b) — same shape as `ClipTrimEvent` / `TrackTrimEvent` already uses, no async surprise in the gesture path.
