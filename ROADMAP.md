@@ -105,15 +105,15 @@ kadr floor bumped to ≥ 0.11.0.
 
 Test-only additions. swift-snapshot-testing + ViewInspector both as test-only deps. 8 visual-regression baselines committed for `TimelineView` / `OverlayHost` / `InspectorPanel`. 9 gesture-wiring smoke tests for `onLongPressClip` / `onZoomSnap` / `onClipDragSnap` / full-composition stacks. Custom `renderForSnapshot(_:size:)` helper bridges SwiftUI → NSImage on macOS where swift-snapshot-testing's `Snapshotting<View, UIImage>` is iOS/tvOS-only. Pure-logic gesture seams (`snapTransition`, `crossings`, `clipMatchesSelection`, `overlayMatchesSelection`) already covered the math; these new tests catch *attachment* regressions.
 
-## v0.10.2 — Audio trim handles *(planned)*
+## v0.10.2 — Audio trim handles ✓ shipped
 
-`TimelineView`'s audio rows already render waveform peaks (v0.6 `showAudioWaveforms`) — the visual surface is done. v0.10.2 adds the gesture surface: leading + trailing trim drag handles on each `AudioTrack` row, mirroring the existing handles on video clips and Track-internal clips. Patch cycle:
+Single-tier patch adding the gesture surface on audio rows; waveform peaks already rendered since v0.6's `showAudioWaveforms`.
 
-- `AudioTrimEvent` Sendable payload (trackIndex + leadingTrim + trailingTrim CMTimes), mirroring `TrackTrimEvent` shape.
-- `TimelineView.onAudioTrim(_:)` modifier — single callback, same shape as `onTrackTrim`.
-- Drag-handle rendering on each audio lane row. Reuses video-clip handle visual + snap haptics.
+- `AudioTrimEvent` Sendable payload (trackIndex + leadingTrim + trailingTrim CMTimes), mirroring `TrackTrimEvent` shape minus the inner clipIndex — audio rows have no inner array, each row IS the trim unit.
+- `TimelineView.onAudioTrim(_:)` modifier, same callback shape as `onTrackTrim`. Default-nil = audio rows render exactly as pre-v0.10.2 (zero pixel diff for callers that don't opt in).
+- `audioItemBlock` / `audioTrimHandle` / `audioTrimGesture` mirror `trackItemBlock` structure: live width preview during drag, wider hit target than visual, drag-end fires through the existing `computeTrimDeltas` pure helper.
 
-~150 LOC + ~10 tests. Pairs with **reels-studio v0.7 Tier 1** which wires the callback to `ProjectStore.applyMusicTrim` / `applySFXTrim`.
+Suite +2 tests (event shape + gesture wiring); 322 → 324 across 25 suites. Pairs with **reels-studio v0.7 Tier 1** which wires the callback to `ProjectStore.applyMusicTrim` / `applySFXTrim`.
 
 ## v0.11.0 — Library accessibility sweep *(planned)*
 

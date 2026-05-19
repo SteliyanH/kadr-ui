@@ -4,6 +4,26 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.2] - 2026-05-19
+
+Audio trim handles. Single-tier patch; no breaking changes. Pairs with **reels-studio v0.7 Tier 1** which wires the callback to `ProjectStore.applyMusicTrim` / `applySFXTrim`.
+
+### Added
+
+- **`AudioTrimEvent`** Sendable struct (trackIndex + leadingTrim + trailingTrim CMTimes). Mirrors `TrackTrimEvent` shape minus the inner clipIndex — audio rows have no inner array, each row IS the trim unit. Surfaces deltas relative to the row's pre-drag bounds; consumers resolve against `AudioTrack.startTime` / `.explicitDuration` themselves (kadr-ui doesn't synchronously load the source asset to know its natural length).
+- **`TimelineView.onAudioTrim(_:)`** modifier with the same callback shape as `onTrackTrim`. Default-nil = audio rows render exactly as they did pre-v0.10.2 (zero pixel diff for callers that don't opt in).
+- **`audioItemBlock` / `audioTrimHandle` / `audioTrimGesture`** render path. Mirrors `trackItemBlock` structure: live width preview during drag, wider hit target than visual (`Rectangle().inset(by: -6)`), drag-end fires through the existing `computeTrimDeltas` pure helper used by clip + Track trim paths.
+
+The lane render switch grows a third branch: when the lane is `.audio` and `onAudioTrim` is set, route through `audioItemBlock`; otherwise stay on `laneItemBlock` so the no-trim path is unchanged.
+
+### Tests
+
++1 `AudioTrimEvent` shape test (`CallbackEventStructsTests`) + 1 gesture-wiring smoke (`GestureWiringTests`). Full suite: 322 → 324 across 25 suites.
+
+### Dependencies
+
+No floor bumps. Platform requirements unchanged.
+
 ## [0.10.1] - 2026-05-12
 
 Snapshot + gesture-wiring test infrastructure. Closes audit items #8 (no snapshot harness) and #9 (gesture paths unit-test-deserts). The library's existing 323-test suite was strong on pure logic but had no regression guard against visual drift or modifier-attachment refactors. v0.10.1 adds both.
