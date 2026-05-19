@@ -65,6 +65,10 @@ public struct TimelineView: View {
     private let onTrim: ((ClipTrimEvent) -> Void)?
     private let onTrackReorder: ((TrackReorderEvent) -> Void)?
     private let onTrackTrim: ((TrackTrimEvent) -> Void)?
+    /// Callback fired on drag-end of an audio-row trim handle. Set via the
+    /// ``onAudioTrim(_:)`` modifier; default `nil` = audio rows render but
+    /// don't host trim handles (pre-v0.10.2 behavior). Added in v0.10.2.
+    private var onAudioTrim: ((AudioTrimEvent) -> Void)?
 
     /// When true and `zoom` + `currentTime` are both bound, the timeline scrolls
     /// content under a viewport-centered playhead instead of letting the
@@ -127,6 +131,11 @@ public struct TimelineView: View {
     @State private var trimmingTrackInfo: TrackDragKey?
     @State private var trimmingTrackEdge: TrimEdge?
     @State private var trimmingTrackPixelDelta: CGFloat = 0
+
+    /// Identity of the in-flight audio-lane trim drag, if any. v0.10.2.
+    @State private var trimmingAudioIndex: Int?
+    @State private var trimmingAudioEdge: TrimEdge?
+    @State private var trimmingAudioPixelDelta: CGFloat = 0
 
     internal struct TrackDragKey: Equatable {
         let trackIndex: Int
@@ -524,6 +533,43 @@ public struct TimelineView: View {
         return copy
     }
 
+    /// Register a handler for audio-row trim drags. Fires on drag-end of either
+    /// the leading or trailing handle of any `AudioTrack` row, surfacing the
+    /// row's index in `video.audioTracks` plus relative `leadingTrim` /
+    /// `trailingTrim` `CMTime` deltas.
+    ///
+    /// When non-`nil`, thin grab handles render on the leading and trailing
+    /// edges of every audio-row block, the same visual as the existing
+    /// video-clip / Track-lane handles. The no-trim path (default) renders
+    /// the row exactly as it did pre-v0.10.2 so callers that don't opt in see
+    /// no visual or gesture change.
+    ///
+    /// Consumers apply the deltas to their own `Video` — typically by adjusting
+    /// `AudioTrack.startTime` (for `leadingTrim`) and `.explicitDuration` (for
+    /// the combined delta). kadr-ui doesn't synchronously resolve the source
+    /// asset to know its natural length, so the surface mirrors `onTrim` /
+    /// `onTrackTrim` (relative deltas, not absolute targets) — same pattern
+    /// the existing video-clip and Track-lane trim callbacks use.
+    ///
+    /// ```swift
+    /// TimelineView(video, showAudioWaveforms: true)
+    ///     .onAudioTrim { event in
+    ///         store.applyMusicTrim(
+    ///             trackIndex: event.trackIndex,
+    ///             leading: event.leadingTrim,
+    ///             trailing: event.trailingTrim
+    ///         )
+    ///     }
+    /// ```
+    ///
+    /// Added in v0.10.2.
+    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
+    public func onAudioTrim(_ action: @escaping (AudioTrimEvent) -> Void) -> TimelineView {
+        var copy = self
+        copy.onAudioTrim = action
+        return copy
+    }
+
     /// Whether `id` should render as selected, given the union of the
     /// single-binding and set-binding selection state. Used by every clip
     /// render site (`videoRow`, `imageRow`, `transitionRow`, Track lane
@@ -668,6 +714,13 @@ public struct TimelineView: View {
                         item: item,
                         items: lane.1,
                         pxPerSecond: pxPerSecond
+                    )
+                } else if case let .audio(audioIndex, _) = lane.0, onAudioTrim != nil {
+                    audioItemBlock(
+                        trackIndex: audioIndex,
+                        item: item,
+                        pxPerSecond: pxPerSecond,
+                        waveform: waveform
                     )
                 } else {
                     laneItemBlock(item: item, pxPerSecond: pxPerSecond, waveform: waveform)
@@ -891,6 +944,91 @@ public struct TimelineView: View {
                     pxPerSecond: pxPerSecond
                 )
                 onTrackTrim?(TrackTrimEvent(trackIndex: key.trackIndex, clipIndex: key.clipIndex, leadingTrim: leading, trailingTrim: trailing))
+            }
+    }
+
+    // MARK: - Audio-lane trim (v0.10.2)
+
+    /// Audio-row block with leading + trailing trim handles. Mirrors
+    /// ``laneItemBlock`` visually (so the no-trim path stays pixel-identical)
+    /// and overlays handles + a live width preview when a drag is in flight.
+    /// Only used when ``onAudioTrim`` is set; the no-trim path stays on the
+    /// plain ``laneItemBlock`` for parity with pre-v0.10.2 behavior.
+    @ViewBuilder
+    private func audioItemBlock(
+        trackIndex: Int,
+        item: LaneItem,
+        pxPerSecond: Double,
+        waveform: AudioWaveform?
+    ) -> some View {
+        let baseX = max(0, CMTimeGetSeconds(item.startTime) * pxPerSecond)
+        let baseW = max(0, CMTimeGetSeconds(item.duration) * pxPerSecond)
+        let isActiveDrag = trimmingAudioIndex == trackIndex
+        let (liveWidth, leadingOffset) = isActiveDrag
+            ? TimelineView.liveTrimMetrics(
+                edge: trimmingAudioEdge ?? .leading,
+                baseWidth: baseW,
+                pixelDelta: trimmingAudioPixelDelta
+            )
+            : (baseW, 0)
+
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(laneItemColor(item.kind))
+                .frame(width: liveWidth, height: laneHeight)
+            if let waveform, !waveform.peaks.isEmpty {
+                AudioWaveformShape(peaks: waveform.peaks)
+                    .fill(Color.white.opacity(0.7))
+                    .frame(width: liveWidth, height: laneHeight)
+                    .allowsHitTesting(false)
+            }
+            HStack(spacing: 0) {
+                audioTrimHandle(trackIndex: trackIndex, edge: .leading, pxPerSecond: pxPerSecond)
+                Spacer(minLength: 0)
+                audioTrimHandle(trackIndex: trackIndex, edge: .trailing, pxPerSecond: pxPerSecond)
+            }
+            .frame(width: liveWidth, height: laneHeight)
+        }
+        .offset(x: baseX + leadingOffset)
+    }
+
+    @ViewBuilder
+    private func audioTrimHandle(trackIndex: Int, edge: TrimEdge, pxPerSecond: Double) -> some View {
+        let isActive = trimmingAudioIndex == trackIndex && trimmingAudioEdge == edge
+        Rectangle()
+            .fill(isActive ? Color.white : Color.white.opacity(0.5))
+            .frame(width: 4)
+            .contentShape(Rectangle().inset(by: -6))   // wider hit target than visual
+            .gesture(audioTrimGesture(trackIndex: trackIndex, edge: edge, pxPerSecond: pxPerSecond))
+    }
+
+    private func audioTrimGesture(trackIndex: Int, edge: TrimEdge, pxPerSecond: Double) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                if onAudioTrim == nil { return }
+                if trimmingAudioIndex == nil {
+                    trimmingAudioIndex = trackIndex
+                    trimmingAudioEdge = edge
+                }
+                trimmingAudioPixelDelta = value.translation.width
+            }
+            .onEnded { value in
+                defer {
+                    trimmingAudioIndex = nil
+                    trimmingAudioEdge = nil
+                    trimmingAudioPixelDelta = 0
+                }
+                guard onAudioTrim != nil, pxPerSecond > 0 else { return }
+                let (leading, trailing) = TimelineView.computeTrimDeltas(
+                    edge: edge,
+                    pixelDelta: value.translation.width,
+                    pxPerSecond: pxPerSecond
+                )
+                onAudioTrim?(AudioTrimEvent(
+                    trackIndex: trackIndex,
+                    leadingTrim: leading,
+                    trailingTrim: trailing
+                ))
             }
     }
 

@@ -103,3 +103,33 @@ public struct TrackTrimEvent: Sendable {
         self.trailingTrim = trailingTrim
     }
 }
+
+/// Payload for ``TimelineView``'s audio-lane trim callback.
+///
+/// Fired on drag-end of a leading / trailing handle on an audio row.
+/// Identifies the row by its position in `video.audioTracks` and surfaces
+/// the trim delta relative to the row's pre-drag bounds. Consumers resolve
+/// the delta against `AudioTrack.startTime` / `.explicitDuration`
+/// themselves — kadr-ui doesn't synchronously load the source asset to
+/// know its natural duration, so the surface mirrors ``ClipTrimEvent`` /
+/// ``TrackTrimEvent`` (relative deltas, not absolute targets).
+///
+/// Added in v0.10.2.
+public struct AudioTrimEvent: Sendable {
+    /// Index into the host `Video`'s top-level `audioTracks` array.
+    public let trackIndex: Int
+
+    /// Leading-edge trim delta. Positive = drag inward (later start);
+    /// negative = drag outward (earlier start).
+    public let leadingTrim: CMTime
+
+    /// Trailing-edge trim delta. Positive = drag outward (later end);
+    /// negative = drag inward (earlier end).
+    public let trailingTrim: CMTime
+
+    public init(trackIndex: Int, leadingTrim: CMTime, trailingTrim: CMTime) {
+        self.trackIndex = trackIndex
+        self.leadingTrim = leadingTrim
+        self.trailingTrim = trailingTrim
+    }
+}
