@@ -91,6 +91,8 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
 | 0.7.0 / 0.7.1 | ≥ 0.10.0 *(uses `Track.opacityFactor`)* |
 | 0.8.0 | ≥ 0.10.0 |
+| 0.9.0 / 0.9.1 / 0.9.2 | ≥ 0.10.1 *(uses animation-clearing modifiers)* |
+| 0.10.0 / 0.10.1 / 0.10.2 | ≥ 0.11.0 *(uses `Speed` enum + `FilterID` keyed API)* |
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 
@@ -102,7 +104,7 @@ The previous `Examples/SimpleViewer/` snippet has been removed in favor of the s
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones (shipped: v0.10.0 API hardening — `Sendable` event-struct callbacks on `TimelineView`, `OverlayHost` multi-select bindings + selection ring; next: v0.10.1 snapshot + gesture-driver test infrastructure, then v0.11 library-level accessibility sweep), and [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library. KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones. Latest: **v0.10.2** — audio trim handles on `TimelineView` (`AudioTrimEvent` Sendable payload + `onAudioTrim(_:)` modifier, drag-handle render path on `AudioTrack` rows, default-nil callback keeps the no-trim path pixel-identical to pre-v0.10.2). Recently shipped: v0.10.0 API hardening (`Sendable` event-struct callbacks on `TimelineView`, `OverlayHost` multi-select bindings + selection ring) and v0.10.1 snapshot + gesture-driver test infrastructure (swift-snapshot-testing + ViewInspector as test-only deps, 8 visual baselines + 9 attachment smokes, custom `renderForSnapshot(_:size:)` SwiftUI→NSImage bridge for macOS). Next: v0.11 library-level accessibility sweep. See [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library — KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
 
 ## License
 
