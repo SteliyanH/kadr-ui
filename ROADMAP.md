@@ -117,7 +117,15 @@ Suite +2 tests (event shape + gesture wiring); 322 → 324 across 25 suites. Pai
 
 ## v0.11.0 — Library accessibility sweep *(planned)*
 
-`.accessibilityLabel` / `.accessibilityHint` / `.accessibilityValue` across every interactive surface inside the library (consumers shouldn't be more accessible than the views they're built on). Dynamic Type + Reduce Motion. Five tiers.
+`.accessibilityLabel` / `.accessibilityHint` / `.accessibilityValue` (+ `.accessibilityAdjustableAction` on drag-only controls) across every interactive surface inside the library — consumers shouldn't be more accessible than the views they're built on. Plus a Dynamic Type pass and Reduce-Motion gating on internal animations. The library ships exactly one `.accessibility*` call today, so this is a from-scratch sweep. Five tiers grouped by surface (see DESIGN.md for the full RFC):
+
+1. **Timeline + overlay canvas** — `TimelineView` / `TimelineLanes` / `TimelineZoom` / `OverlayHost`: clips, trim handles, scrubber/playhead, zoom, overlay selection.
+2. **Editors with control points** — `KeyframeEditor` / `OverlayKeyframeEditor` / `SpeedCurveEditor`: per-marker labels + values + adjustable retiming.
+3. **Inspector panels + caption editor** — `InspectorPanel` / `OverlayInspector` / `CaptionEditor`: slider values + adjustable actions, picker labels, timestamp fields.
+4. **Cross-cutting** — Dynamic Type pass + Reduce-Motion gating + media-view labels (`VideoPreview` / `ThumbnailStrip` / `AudioWaveform` / `AnimatedTextLayerView`).
+5. **Release prep** + tag v0.11.0.
+
+Internal view modification — minimal-to-no new public API (accessibility is automatic, not opt-in).
 
 ## v0.12.0 — `@Observable` migration *(planned)*
 
