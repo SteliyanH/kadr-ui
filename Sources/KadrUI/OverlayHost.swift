@@ -118,6 +118,18 @@ public struct OverlayHost: View {
         }
     }
 
+    /// VoiceOver label for an overlay — its kind, plus the text content for text
+    /// overlays so the element is self-describing. v0.11.
+    static func overlayAccessibilityLabel(for overlay: any Overlay) -> String {
+        if let text = overlay as? TextOverlay {
+            let trimmed = text.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Text overlay" : "Text overlay: \(trimmed)"
+        }
+        if overlay is ImageOverlay { return "Image overlay" }
+        if overlay is StickerOverlay { return "Sticker overlay" }
+        return "Overlay"
+    }
+
     /// Returns `true` if `overlay` should render at composition time `time`. Pure helper
     /// for unit tests. Untimed overlays (no `visibilityRange`) always return `true`.
     /// When `time` is `nil`, returns `true` regardless of `visibilityRange`.
@@ -147,6 +159,13 @@ public struct OverlayHost: View {
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
             )
+            // v0.11 — one labelled element per overlay. Combine the rendered content
+            // (e.g. a text overlay's own glyphs) into a single element with an explicit
+            // label/value/hint rather than exposing raw subviews.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(OverlayHost.overlayAccessibilityLabel(for: overlay))
+            .accessibilityValue(String(format: "%.0f%% opacity", overlay.opacity * 100))
+            .accessibilityHint(hasAnyGestureHandler ? "Double tap to select. Drag to move." : "")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
 
         Group {

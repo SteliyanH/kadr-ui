@@ -743,6 +743,7 @@ public struct TimelineView: View {
                     .padding(.leading, 4)
                     .padding(.top, 2)
                     .allowsHitTesting(false)
+                    .accessibilityLabel("\(label) lane")
             }
         }
     }
@@ -1186,6 +1187,23 @@ public struct TimelineView: View {
             }
             .contentShape(Rectangle())
             .gesture(scrubGesture(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds))
+            .accessibilityElement()
+            .accessibilityLabel("Playhead")
+            .accessibilityValue(scrubAccessibilityValue(totalSeconds: totalSeconds))
+            .accessibilityHint("Swipe up or down to move the playhead by one second.")
+            .accessibilityAdjustableAction { direction in
+                guard let binding = currentTime else { return }
+                let current = max(0, CMTimeGetSeconds(binding.wrappedValue))
+                let next = direction == .increment ? current + 1 : current - 1
+                let clamped = min(max(next, 0), max(0, totalSeconds))
+                binding.wrappedValue = CMTime(seconds: clamped, preferredTimescale: 600)
+            }
+    }
+
+    /// VoiceOver value for the scrub strip — current playhead time in seconds.
+    private func scrubAccessibilityValue(totalSeconds: Double) -> String {
+        let now = currentTime.map { max(0, CMTimeGetSeconds($0.wrappedValue)) } ?? 0
+        return String(format: "%.1f of %.1f seconds", now, max(0, totalSeconds))
     }
 
     private func scrubGesture(pxPerSecond: Double, totalSeconds: Double) -> some Gesture {
@@ -1230,6 +1248,9 @@ public struct TimelineView: View {
                 .offset(x: offset)
                 .animation(.snappy(duration: 0.18), value: offset)
                 .zIndex(isPartOfSourceGroup(index) ? 1 : 0)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Self.clipAccessibilityLabel(for: clip, index: index))
+                .accessibilityValue(String(format: "%.1f seconds", seconds))
         } else {
             let isSelected = TimelineView.clipMatchesSelection(
                 id: clip.clipID,
@@ -1279,9 +1300,16 @@ public struct TimelineView: View {
                         handleTap(on: clip)
                     }
                     .gesture(reorderGesture(for: index, pxPerSecond: pxPerSecond))
+                    .accessibilityValue(Self.clipAccessibilityValue(seconds: seconds, isSelected: isSelected))
+                    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityHint("Double tap to select. Drag to reorder.")
             }
             .frame(width: baseWidth, height: 40, alignment: .topLeading)
             .padding(.horizontal, 1)
+            // Group the clip body + its trim handles under one labelled element so
+            // VoiceOver announces "Video clip 2" then exposes the trim controls within.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Self.clipAccessibilityLabel(for: clip, index: index))
         }
     }
 
@@ -1427,11 +1455,26 @@ public struct TimelineView: View {
     @ViewBuilder
     private func trimHandle(at index: Int, edge: TrimEdge, pxPerSecond: Double) -> some View {
         let isActive = trimmingIndex == index && trimmingEdge == edge
+        let edgeName = edge == .leading ? "start" : "end"
         Rectangle()
             .fill(isActive ? Color.white : Color.white.opacity(0.5))
             .frame(width: 4)
             .contentShape(Rectangle().inset(by: -6))   // wider hit target than visual
             .gesture(trimGesture(at: index, edge: edge, pxPerSecond: pxPerSecond))
+            // VoiceOver-operable trimming: the visual handle is drag-only, so expose an
+            // adjustable action that emits the same ClipTrimEvent a drag would (v0.11).
+            .accessibilityElement()
+            .accessibilityLabel("Trim \(edgeName) of clip \(index + 1)")
+            .accessibilityHint("Swipe up or down to trim by a tenth of a second.")
+            .accessibilityAdjustableAction { direction in
+                guard onTrim != nil else { return }
+                let step = TimelineView.trimAccessibilityStep
+                // increment = trim further inward; decrement = trim outward.
+                let delta = direction == .increment ? step : CMTimeMultiply(step, multiplier: -1)
+                let leading = edge == .leading ? delta : .zero
+                let trailing = edge == .trailing ? delta : .zero
+                onTrim?(ClipTrimEvent(clipIndex: index, leadingTrim: leading, trailingTrim: trailing))
+            }
     }
 
     private func trimGesture(at index: Int, edge: TrimEdge, pxPerSecond: Double) -> some Gesture {
@@ -1688,6 +1731,33 @@ public struct TimelineView: View {
         else { prefix = "Clip" }
         return String(format: "%@ %.1fs", prefix, seconds)
     }
+
+    // MARK: - Accessibility (v0.11)
+
+    /// VoiceOver label for a clip / transition block — kind + 1-based position.
+    /// Spoken instead of the on-screen abbreviation so VoiceOver users get the
+    /// full noun ("Video clip 2") rather than "Video 3.0s". Pure + static so the
+    /// label semantics are unit-testable without driving SwiftUI.
+    nonisolated internal static func clipAccessibilityLabel(for clip: any Clip, index: Int) -> String {
+        let kind: String
+        if clip is Kadr.Transition { kind = "Transition" }
+        else if clip is VideoClip { kind = "Video clip" }
+        else if clip is ImageClip { kind = "Image clip" }
+        else if clip is TitleSequence { kind = "Title clip" }
+        else { kind = "Clip" }
+        return "\(kind) \(index + 1)"
+    }
+
+    /// VoiceOver value for a clip — duration, plus selection state when selected.
+    nonisolated internal static func clipAccessibilityValue(seconds: Double, isSelected: Bool) -> String {
+        let duration = String(format: "%.1f seconds", seconds)
+        return isSelected ? "\(duration), selected" : duration
+    }
+
+    /// Step a trim adjustable action nudges by, per VoiceOver increment/decrement.
+    /// 0.1s is coarse enough to be useful without a drag and matches the
+    /// timeline's snap feel; consumers refine on commit.
+    private static let trimAccessibilityStep = CMTime(seconds: 0.1, preferredTimescale: 600)
 
     // MARK: - Durations
 
