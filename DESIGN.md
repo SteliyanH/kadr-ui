@@ -977,17 +977,87 @@ Additive micro-patch following v0.10.0. Same shape as v0.9.1 / v0.9.2. Three tie
 
 Closes audit gaps #8 and #9.
 
-## v0.11.0 — Library accessibility sweep *(planned, sketch)*
+## v0.11.0 — Library accessibility sweep
 
-Parallel to reels-studio v0.5's app sweep, applied to the **library** views every consumer ships. Five tiers:
+**Status:** RFC. No code yet.
 
-1. `TimelineView` clip / transition / scrub blocks — labels, values, hints.
-2. `KeyframeEditor` / `OverlayKeyframeEditor` rows — per-property labels, per-marker values.
-3. `SpeedCurveEditor` + Inspector slider values + Dynamic Type pass.
-4. Reduce Motion awareness on internal animations.
-5. Release prep + tag v0.11.0.
+### Motivation
 
-Closes audit gap #7.
+KadrUI ships the interactive views every consumer builds their editor on — and today the library is **effectively inaccessible**: a survey of all 19 source files found exactly **one** `.accessibility*` call in the entire library (`OverlayHost.swift:150`, an `.isSelected` trait). Every draggable clip, trim handle, keyframe marker, slider, and speed-curve point is invisible or inoperable under VoiceOver, and nothing responds to Dynamic Type or Reduce Motion. A consumer app cannot be more accessible than the components it's built from, so this gap caps the accessibility of every downstream app (reels-studio included).
+
+This cycle is a **whole-library sweep**: VoiceOver labels / values / hints / adjustable actions on every interactive surface, a Dynamic Type pass, and Reduce-Motion gating on internal animations. Parallel to reels-studio's app-level sweep, but applied at the library layer so the fix lands once for all consumers. Closes audit gap #7.
+
+### Scope lock — v0.11
+
+In scope:
+- **VoiceOver semantics** on every interactive element — `.accessibilityLabel`, `.accessibilityHint`, `.accessibilityValue`, and `.accessibilityAddTraits` as appropriate.
+- **`.accessibilityAdjustableAction`** on the value-bearing controls that today are *drag-only* (trim handles, keyframe / speed-curve markers, inspector sliders). Without this they're VoiceOver-inoperable — read-only labels alone wouldn't make them usable, so adjustable actions are in scope, not a stretch goal.
+- **Dynamic Type** — replace hardcoded `.font(.system(size:))` / fixed text-row heights with type-scaling equivalents; verify layouts don't clip at accessibility text sizes (`.accessibility1`+). Where a fixed pixel geometry is intrinsic (timeline lane heights, the canvas), keep it but ensure text inside scales or truncates gracefully.
+- **Reduce Motion** — gate internal animations on `@Environment(\.accessibilityReduceMotion)`: the playhead recenter ease (`TimelineView`), drag `scaleEffect` feedback, and `AnimatedTextLayerView`'s CALayer animations. Reduced path snaps instead of animating.
+
+Out of scope:
+- **Custom VoiceOver rotors** / `.accessibilityRotor` for jumping between clips or keyframes — a genuine enhancement, but beyond "label/value/hint" and additive later. v1.0+ candidate.
+- **`.accessibilityRepresentation`** wholesale-replacing a custom view with a standard control — heavier than needed; the modifier approach covers the surfaces.
+- **Localization of the new strings.** Labels ship as plain English `String`s this cycle. Wrapping them in `String(localized:)` + a string catalog is its own cycle (and a public-facing decision about whether KadrUI owns a localization bundle). Flagged, not done.
+- **Audio scrubbing / crossfade direct-manipulation a11y** — those gesture surfaces don't exist yet (deferred from v0.10.2); their a11y lands with them.
+
+### Approach / surface
+
+This is overwhelmingly **internal view modification — minimal-to-no new public API.** Accessibility should be automatic, not an opt-in knob, so the default behavior of every view simply becomes accessible. The one place a tiny public surface *may* appear is if a label needs caller-supplied context the library can't infer (e.g. a clip's display name) — if so, it reuses data already passed in (the host `Video`'s clip metadata) rather than adding new parameters. The RFC's default is **zero new public symbols**; any addition gets called out at implementation time.
+
+Labels are derived from data the views already hold — clip index / time range, keyframe time + value, slider property + formatted value, caption cue text + timestamps. Values use the same formatters the visible text already uses (e.g. `monospacedDigit` time strings), so what VoiceOver speaks matches what's on screen.
+
+### Tier breakdown *(five tiers — grouped by surface, then cross-cutting)*
+
+#### Tier 1 — Timeline + overlay canvas (the gesture surfaces)
+
+`TimelineView`, `TimelineLanes`, `TimelineZoom`, `OverlayHost`.
+
+- Clips / Track-internal clips / audio rows: `.accessibilityLabel` (what it is + index), `.accessibilityValue` (time range), `.isSelected` trait, hints for select / drag.
+- Trim handles + scrubber/playhead: `.accessibilityValue` (current time / boundary) + `.accessibilityAdjustableAction` (nudge by a frame / snap step) so they're operable without a drag.
+- Zoom: adjustable action over the `pixelsPerSecond` range; lane labels (`TimelineLanes`) get semantic labels.
+- `OverlayHost`: each overlay becomes an accessibility element with label (kind + index), value (position/size/opacity), drag hint; keep the existing `.isSelected` trait.
+
+Highest user impact — the timeline is the primary surface.
+
+#### Tier 2 — Editors with control points
+
+`KeyframeEditor`, `OverlayKeyframeEditor`, `SpeedCurveEditor`.
+
+- Each marker: label (property + "keyframe N"), value (time + value; speed multiplier on its log2 scale read as e.g. "2×"), adjustable action to retime / rescale.
+- Row/canvas: hint for the tap-to-add / long-press-to-remove gestures (otherwise undiscoverable under VoiceOver).
+
+#### Tier 3 — Inspector panels + caption editor
+
+`InspectorPanel`, `OverlayInspector`, `CaptionEditor`.
+
+- All sliders (transform X/Y/rotation/scale, opacity, filter intensity, overlay position/rotation): `.accessibilityValue` (formatted) + `.accessibilityAdjustableAction`. Pickers (anchor, animation) get labels.
+- `CaptionEditor`: cue text field label, start/end timestamp fields get labels + values, "set to playhead" / add / delete buttons get labels + hints.
+
+#### Tier 4 — Cross-cutting: Dynamic Type + Reduce Motion + media views
+
+All components, plus `VideoPreview`, `ThumbnailStrip`, `AudioWaveform`, `AnimatedTextLayerView`.
+
+- Dynamic Type: audit hardcoded font sizes / fixed text heights across the library; scale or gracefully truncate.
+- Reduce Motion: gate the playhead recenter ease, drag `scaleEffect`, and `AnimatedTextLayerView` layer animations on `accessibilityReduceMotion`.
+- Media views: `VideoPreview` loading / error state gets an accessible description; `ThumbnailStrip` thumbnails get time labels (or are grouped as one labelled element); `AudioWaveform` is marked decorative / image with a summary label rather than exposing every peak.
+
+#### Tier 5 — Release prep + tag v0.11.0
+
+CHANGELOG (Accessibility section), ROADMAP / README, compatibility-table note. Tag, develop→main, GH release, reset develop.
+
+### Testing
+
+- The v0.10.1 snapshot harness can't assert VoiceOver output, but `ViewInspector` can confirm modifiers are attached: per interactive element, assert `.accessibilityLabel` / `.accessibilityValue` exist and adjustable actions are wired. Add these alongside the existing gesture-wiring tests.
+- A small helper-level test that the Reduce-Motion branch selects the no-animation path given the environment value.
+- Snapshot baselines at an accessibility Dynamic Type size for a representative view or two, to catch clipping regressions.
+
+### Risks
+
+- **VoiceOver semantics can't be unit-verified end-to-end.** `ViewInspector` proves the modifier is present, not that VoiceOver reads it sensibly. Mitigation: keep labels derived from the same data/formatters as the visible text; one manual VoiceOver pass before tag (documented in the release checklist), since CI can't do it.
+- **Adjustable-action step size.** Nudging a trim handle / keyframe needs a sensible increment (one frame? one snap step?). Pick per-control increments that match the existing snap semantics so VoiceOver adjustment and drag-snap agree.
+- **Breadth vs. depth.** 19 files is a wide sweep; the temptation is shallow labels everywhere. The tier order front-loads the high-traffic surfaces (timeline, editors) so if scope tightens, the media-view polish (Tier 4 tail) is the give, not the core controls.
+- **Dynamic Type in a fixed-geometry timeline.** Lane heights are intrinsically pixel-based; large text can't reflow them freely. Mitigation: scale/truncate text within fixed lanes rather than growing lanes — accept that the timeline stays compact and lean on VoiceOver for the detail Dynamic Type can't show.
 
 ## v0.10.2 — Audio trim handles *(planned)*
 
