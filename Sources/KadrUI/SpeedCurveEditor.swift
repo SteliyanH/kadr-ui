@@ -149,8 +149,8 @@ public struct SpeedCurveEditor: View {
                 }
 
                 // Keyframe markers.
-                ForEach(keyframes, id: \.time.value) { kf in
-                    keyframeMarker(kf, size: size, durationSeconds: durationSeconds)
+                ForEach(Array(keyframes.enumerated()), id: \.element.time.value) { offset, kf in
+                    keyframeMarker(kf, index: offset, size: size, durationSeconds: durationSeconds)
                 }
             }
         }
@@ -159,6 +159,7 @@ public struct SpeedCurveEditor: View {
     @ViewBuilder
     private func keyframeMarker(
         _ kf: Kadr.Animation<Double>.Keyframe,
+        index: Int,
         size: CGSize,
         durationSeconds: Double
     ) -> some View {
@@ -196,6 +197,35 @@ public struct SpeedCurveEditor: View {
                         )
                     }
             )
+            // v0.11 — the marker carries two axes (time + speed multiplier). VoiceOver
+            // gets a descriptive label/value; the adjustable action drives the speed
+            // multiplier (the editor's primary axis), and a custom action removes.
+            .accessibilityElement()
+            .accessibilityLabel("Speed keyframe \(index + 1)")
+            .accessibilityValue(String(format: "%.2f seconds, %.2f× speed", CMTimeGetSeconds(kf.time), kf.value))
+            .accessibilityHint("Swipe up or down to change the speed multiplier.")
+            .accessibilityAdjustableAction { direction in
+                let step = SpeedCurveEditor.multiplierAccessibilityStep
+                let next = kf.value + (direction == .increment ? step : -step)
+                setMultiplier(next, at: kf)
+            }
+            .accessibilityAction(named: "Remove") {
+                removeKeyframe(at: kf.time)
+            }
+    }
+
+    /// Replace the speed multiplier of the keyframe at `kf.time`, clamped to the
+    /// documented range. Backs the marker's VoiceOver adjustable action. v0.11.
+    private func setMultiplier(_ multiplier: Double, at kf: Kadr.Animation<Double>.Keyframe) {
+        guard let curve = clip.speedCurve else { return }
+        let clamped = SpeedCurveEditor.clampMultiplier(multiplier)
+        guard clamped != kf.value else { return }
+        let cleared = SpeedCurveEditor.keyframesByRemoving(at: kf.time, from: curve.keyframes)
+        let updated = SpeedCurveEditor.keyframesByAdding(
+            Kadr.Animation<Double>.Keyframe(time: kf.time, value: clamped),
+            to: cleared
+        )
+        onUpdate(Kadr.Animation<Double>.keyframes(updated, timing: curve.timing))
     }
 
     // MARK: - Edit operations
@@ -269,6 +299,10 @@ public struct SpeedCurveEditor: View {
 
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension SpeedCurveEditor {
+
+    /// Multiplier step a marker's adjustable action nudges by, per VoiceOver
+    /// increment/decrement. Clamped to the documented 0.25...4.0 range on apply. v0.11.
+    static let multiplierAccessibilityStep: Double = 0.25
 
     /// Time-axis duration in seconds for a clip's speed-curve editor. Prefers
     /// `trimRange.duration` (the authoring domain per kadr v0.9 docs); falls

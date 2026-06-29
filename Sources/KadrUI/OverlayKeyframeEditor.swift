@@ -103,11 +103,17 @@ public struct OverlayKeyframeEditor: View {
                         guard phSecs >= 0, phSecs <= totalSeconds else { return }
                         onAdd?(overlayID, property, currentTime.wrappedValue)
                     }
+                    // v0.11 — tap-to-add surface exposed as an activatable element.
+                    .accessibilityElement()
+                    .accessibilityLabel("\(OverlayKeyframeEditor.label(for: property)) keyframe track")
+                    .accessibilityHint("Adds a keyframe at the playhead when activated.")
+                    .accessibilityAddTraits(.isButton)
 
                 Text(OverlayKeyframeEditor.label(for: property))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 6)
+                    .accessibilityHidden(true)
 
                 if phSecs >= 0, phSecs <= totalSeconds {
                     let x = CGFloat(phSecs / totalSeconds) * width
@@ -117,7 +123,7 @@ public struct OverlayKeyframeEditor: View {
                         .position(x: x, y: rowHeight / 2)
                 }
 
-                ForEach(keyframes, id: \.value) { time in
+                ForEach(Array(keyframes.enumerated()), id: \.element.value) { offset, time in
                     let key = KeyframeKey(overlayID: overlayID, property: property, timeMs: time.value)
                     let baseX = CGFloat(CMTimeGetSeconds(time) / totalSeconds) * width
                     let dragX = dragOffsetByKey[key] ?? 0
@@ -148,6 +154,24 @@ public struct OverlayKeyframeEditor: View {
                                     }
                                 }
                         )
+                        // v0.11 — labelled, adjustable marker: swipe retimes, custom
+                        // action removes (drag + long-press are otherwise unreachable).
+                        .accessibilityElement()
+                        .accessibilityLabel("\(OverlayKeyframeEditor.label(for: property)) keyframe \(offset + 1)")
+                        .accessibilityValue(String(format: "%.2f seconds", CMTimeGetSeconds(time)))
+                        .accessibilityHint("Swipe up or down to move the keyframe.")
+                        .accessibilityAdjustableAction { direction in
+                            let cur = CMTimeGetSeconds(time)
+                            let delta = direction == .increment ? KeyframeEditor.retimeAccessibilityStep : -KeyframeEditor.retimeAccessibilityStep
+                            let toSec = max(0, min(totalSeconds, cur + delta))
+                            let to = CMTime(seconds: toSec, preferredTimescale: 600)
+                            if CMTimeCompare(time, to) != 0 {
+                                onRetime?(overlayID, property, time, to)
+                            }
+                        }
+                        .accessibilityAction(named: "Remove") {
+                            onRemove?(overlayID, property, time)
+                        }
                 }
             }
         }
