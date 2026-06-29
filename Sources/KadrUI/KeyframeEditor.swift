@@ -133,12 +133,19 @@ public struct KeyframeEditor: View {
                         guard secs >= 0, secs <= clipDurSecs else { return }
                         onAdd?(clipID, property, playheadClipRel)
                     }
+                    // v0.11 — the row is the tap-to-add surface; expose it as an
+                    // activatable element (tap-add is undiscoverable to VoiceOver otherwise).
+                    .accessibilityElement()
+                    .accessibilityLabel("\(KeyframeEditor.label(for: property)) keyframe track")
+                    .accessibilityHint("Adds a keyframe at the playhead when activated.")
+                    .accessibilityAddTraits(.isButton)
 
-                // Property label.
+                // Property label. Hidden from a11y — the row element already names it.
                 Text(KeyframeEditor.label(for: property))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 6)
+                    .accessibilityHidden(true)
 
                 // Playhead indicator on this row (clip-relative).
                 let phSecs = CMTimeGetSeconds(playheadClipRel)
@@ -151,7 +158,7 @@ public struct KeyframeEditor: View {
                 }
 
                 // Keyframe markers.
-                ForEach(keyframes, id: \.value) { time in
+                ForEach(Array(keyframes.enumerated()), id: \.element.value) { offset, time in
                     let key = KeyframeKey(clipID: clipID, property: property, timeMs: time.value)
                     let baseX = CGFloat(CMTimeGetSeconds(time) / clipDurSecs) * width
                     let dragX = dragOffsetByKey[key] ?? 0
@@ -183,6 +190,25 @@ public struct KeyframeEditor: View {
                                     }
                                 }
                         )
+                        // v0.11 — each marker is a labelled, adjustable element: swipe
+                        // retimes (drag-equivalent), a custom action removes (long-press
+                        // equivalent). Both gestures are otherwise VoiceOver-unreachable.
+                        .accessibilityElement()
+                        .accessibilityLabel("\(KeyframeEditor.label(for: property)) keyframe \(offset + 1)")
+                        .accessibilityValue(String(format: "%.2f seconds", CMTimeGetSeconds(time)))
+                        .accessibilityHint("Swipe up or down to move the keyframe.")
+                        .accessibilityAdjustableAction { direction in
+                            let cur = CMTimeGetSeconds(time)
+                            let delta = direction == .increment ? KeyframeEditor.retimeAccessibilityStep : -KeyframeEditor.retimeAccessibilityStep
+                            let toSec = max(0, min(clipDurSecs, cur + delta))
+                            let to = CMTime(seconds: toSec, preferredTimescale: 600)
+                            if CMTimeCompare(time, to) != 0 {
+                                onRetime?(clipID, property, time, to)
+                            }
+                        }
+                        .accessibilityAction(named: "Remove") {
+                            onRemove?(clipID, property, time)
+                        }
                 }
             }
         }
@@ -193,6 +219,10 @@ public struct KeyframeEditor: View {
 
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension KeyframeEditor {
+
+    /// Seconds a keyframe retime adjustable action nudges by, per VoiceOver
+    /// increment/decrement. Matches the timeline trim step. v0.11.
+    static let retimeAccessibilityStep: Double = 0.1
 
     /// The properties to surface as rows for a clip. Always emits `.transform` and
     /// `.opacity` (every Kadr clip type carries the surface). Adds a `.filter(index:)`
