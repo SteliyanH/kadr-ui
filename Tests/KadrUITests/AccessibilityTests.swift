@@ -88,4 +88,38 @@ final class AccessibilityTests: XCTestCase {
             .onLayerTap { _ in }
         XCTAssertNoThrow(try view.inspect())
     }
+
+    // MARK: - Tier 2: editors with control points
+
+    func testKeyframeEditorWithMarkersBuilds() throws {
+        let id = ClipID("a")
+        let anim = Animation<Double>.keyframes([.at(0.0, value: 0.0), .at(1.0, value: 1.0)])
+        let video = Video {
+            ImageClip(PlatformImage(), duration: 2.0).id(id).opacity(0.0, animation: anim)
+        }
+        let editor = KeyframeEditor(
+            video,
+            selectedClipID: .constant(id),
+            currentTime: .constant(.zero),
+            onAdd: { _, _, _ in },
+            onRemove: { _, _, _ in },
+            onRetime: { _, _, _, _ in }
+        )
+        XCTAssertNoThrow(try editor.inspect())
+    }
+
+    func testSpeedCurveEditorWithMarkersBuilds() throws {
+        let url = URL(fileURLWithPath: "/tmp/x.mov")
+        let curve = Animation<Double>.keyframes([.at(0.0, value: 1.0), .at(1.0, value: 2.0)])
+        let clip = VideoClip(url: url).trimmed(to: 0.0...2.0).speed(.curved(curve))
+        let view = SpeedCurveEditor(clip: clip, onUpdate: { _ in })
+        XCTAssertNoThrow(try view.inspect())
+    }
+
+    // MARK: - Adjustable-action step constants
+
+    func testAccessibilityStepConstantsAreSane() {
+        XCTAssertEqual(KeyframeEditor.retimeAccessibilityStep, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(SpeedCurveEditor.multiplierAccessibilityStep, 0.25, accuracy: 0.0001)
+    }
 }
