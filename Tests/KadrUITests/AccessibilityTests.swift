@@ -149,10 +149,32 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertNoThrow(try view.inspect())
     }
 
+    // MARK: - Tier 4: cross-cutting (zoom action + media views)
+
+    func testAccessibleZoomMultipliesAndClamps() {
+        // Normal step.
+        XCTAssertEqual(TimelineView.accessibleZoom(from: 50, factor: 1.5), 75, accuracy: 0.001)
+        // Clamps at the max (400).
+        XCTAssertEqual(TimelineView.accessibleZoom(from: 300, factor: 1.5), 400, accuracy: 0.001)
+        // Clamps at the min (8).
+        XCTAssertEqual(TimelineView.accessibleZoom(from: 10, factor: 1 / 1.5), 8, accuracy: 0.001)
+    }
+
+    func testVideoPreviewBuildsWithStateLabels() throws {
+        let view = VideoPreview(sampleVideo())
+        XCTAssertNoThrow(try view.inspect())
+    }
+
+    func testThumbnailStripBuildsAsSummaryElement() throws {
+        let view = ThumbnailStrip(sampleVideo(), count: 4)
+        XCTAssertNoThrow(try view.inspect())
+    }
+
     // MARK: - Adjustable-action step constants
 
     func testAccessibilityStepConstantsAreSane() {
         XCTAssertEqual(KeyframeEditor.retimeAccessibilityStep, 0.1, accuracy: 0.0001)
         XCTAssertEqual(SpeedCurveEditor.multiplierAccessibilityStep, 0.25, accuracy: 0.0001)
+        XCTAssertEqual(TimelineView.zoomAccessibilityFactor, 1.5, accuracy: 0.0001)
     }
 }
