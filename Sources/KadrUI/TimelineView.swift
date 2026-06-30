@@ -43,6 +43,11 @@ import Kadr
 @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct TimelineView: View {
 
+    /// v0.11 — when the system "Reduce Motion" setting is on, the timeline's
+    /// playhead-recenter scroll and clip reorder/transition transitions snap instead
+    /// of animating.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let video: Video
     private let currentTime: Binding<CMTime>?
     private let selectedClipID: Binding<ClipID?>?
@@ -358,9 +363,32 @@ public struct TimelineView: View {
         if zoom != nil {
             scrollableStack(stack: stack, pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
                 .gesture(zoomGesture(totalSeconds: totalSeconds))
+                // v0.11 — pinch-zoom is unreachable under VoiceOver; expose it as named
+                // container actions (via the actions rotor) rather than an adjustable
+                // element, which would swallow the contained clip elements.
+                .accessibilityAction(named: "Zoom in") { adjustZoomAccessibly(by: TimelineView.zoomAccessibilityFactor) }
+                .accessibilityAction(named: "Zoom out") { adjustZoomAccessibly(by: 1 / TimelineView.zoomAccessibilityFactor) }
         } else {
             stack
         }
+    }
+
+    /// Multiply the bound zoom's `pixelsPerSecond` by `factor`, clamped to the valid
+    /// range — backs the VoiceOver "Zoom in" / "Zoom out" actions. v0.11.
+    private func adjustZoomAccessibly(by factor: Double) {
+        guard let binding = zoom else { return }
+        binding.wrappedValue.pixelsPerSecond = TimelineView.accessibleZoom(
+            from: binding.wrappedValue.pixelsPerSecond, factor: factor
+        )
+    }
+
+    /// Factor each VoiceOver zoom action multiplies / divides the zoom by. v0.11.
+    static let zoomAccessibilityFactor: Double = 1.5
+
+    /// Pure: clamp `pixelsPerSecond * factor` to the valid zoom range. Testable seam
+    /// for the VoiceOver zoom actions. v0.11.
+    nonisolated static func accessibleZoom(from pixelsPerSecond: Double, factor: Double) -> Double {
+        TimelineZoom.clamp(pixelsPerSecond * factor)
     }
 
     /// Wraps `stack` in a `ScrollView`, optionally inside a `ScrollViewReader`
@@ -391,8 +419,12 @@ public struct TimelineView: View {
                     }
                 }
                 .onChange(of: currentTime.wrappedValue) { _ in
-                    withAnimation(.easeOut(duration: 0.15)) {
+                    if reduceMotion {
                         proxy.scrollTo(Self.playheadAnchorID, anchor: .center)
+                    } else {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo(Self.playheadAnchorID, anchor: .center)
+                        }
                     }
                 }
                 .onAppear {
@@ -782,6 +814,7 @@ public struct TimelineView: View {
             if let waveform, !waveform.peaks.isEmpty {
                 AudioWaveformShape(peaks: waveform.peaks)
                     .fill(Color.white.opacity(0.7))
+                    .accessibilityHidden(true)   // decorative; the audio row carries the label
                     .frame(width: w, height: laneHeight)
                     .allowsHitTesting(false)
             }
@@ -980,6 +1013,7 @@ public struct TimelineView: View {
             if let waveform, !waveform.peaks.isEmpty {
                 AudioWaveformShape(peaks: waveform.peaks)
                     .fill(Color.white.opacity(0.7))
+                    .accessibilityHidden(true)   // decorative; the audio row carries the label
                     .frame(width: liveWidth, height: laneHeight)
                     .allowsHitTesting(false)
             }
@@ -1246,7 +1280,7 @@ public struct TimelineView: View {
             transitionGlyph()
                 .frame(width: baseWidth)
                 .offset(x: offset)
-                .animation(.snappy(duration: 0.18), value: offset)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: offset)
                 .zIndex(isPartOfSourceGroup(index) ? 1 : 0)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Self.clipAccessibilityLabel(for: clip, index: index))
@@ -1293,7 +1327,7 @@ public struct TimelineView: View {
                     .scaleEffect(isDragging ? 1.05 : 1.0)
                     .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
                     .offset(x: clipReorderOffset(for: index, pxPerSecond: pxPerSecond))
-                    .animation(.snappy(duration: 0.18), value: reorderAnimationKey(for: index, pxPerSecond: pxPerSecond))
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: reorderAnimationKey(for: index, pxPerSecond: pxPerSecond))
                     .zIndex(isDragging || trimmingIndex == index ? 1 : 0)
                     .contentShape(Rectangle())
                     .onTapGesture {

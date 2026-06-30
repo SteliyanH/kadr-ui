@@ -70,9 +70,11 @@ public struct VideoPreview: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.title)
                     .foregroundStyle(.white)
+                    .accessibilityLabel("Preview failed to load")
             } else {
                 ProgressView()
                     .tint(.white)
+                    .accessibilityLabel("Loading preview")
             }
         }
         .task(id: identity) {

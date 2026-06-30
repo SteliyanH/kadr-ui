@@ -74,6 +74,10 @@ public struct ThumbnailStrip: View {
         .task {
             await loadThumbnails()
         }
+        // v0.11 — the strip is a visual scrubbing aid; expose it as one summary element
+        // rather than N unlabelled "image"s. Scrubbing itself is driven via TimelineView.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Thumbnail filmstrip")
     }
 
     @ViewBuilder
