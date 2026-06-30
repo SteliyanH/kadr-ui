@@ -101,6 +101,7 @@ public struct CaptionEditor: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Delete cue \(index + 1)")
             }
             HStack(spacing: 8) {
                 timestampField(
@@ -119,6 +120,7 @@ public struct CaptionEditor: View {
                     Button("→") { setStartToPlayhead(at: index, cue: cue) }
                         .buttonStyle(.borderless)
                         .help("Set start to playhead")
+                        .accessibilityLabel("Set start to playhead")
                 }
                 timestampField(
                     label: "End",
@@ -138,6 +140,7 @@ public struct CaptionEditor: View {
                     Button("→") { setEndToPlayhead(at: index, cue: cue) }
                         .buttonStyle(.borderless)
                         .help("Set end to playhead")
+                        .accessibilityLabel("Set end to playhead")
                 }
                 if !isValid {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -163,8 +166,13 @@ public struct CaptionEditor: View {
             Text(label)
                 .font(.caption2.monospaced())
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TimestampField(seconds: seconds, onCommit: onCommit)
                 .frame(width: 80)
+                // v0.11 — the bare "0.00" field needs the Start/End context spoken,
+                // plus the current value in seconds.
+                .accessibilityLabel("\(label) time")
+                .accessibilityValue(String(format: "%.2f seconds", seconds))
         }
     }
 
