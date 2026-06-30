@@ -115,7 +115,7 @@ Single-tier patch adding the gesture surface on audio rows; waveform peaks alrea
 
 Suite +2 tests (event shape + gesture wiring); 322 → 324 across 25 suites. Pairs with **reels-studio v0.7 Tier 1** which wires the callback to `ProjectStore.applyMusicTrim` / `applySFXTrim`.
 
-## v0.11.0 — Library accessibility sweep *(planned)*
+## v0.11.0 — Library accessibility sweep ✓ shipped
 
 `.accessibilityLabel` / `.accessibilityHint` / `.accessibilityValue` (+ `.accessibilityAdjustableAction` on drag-only controls) across every interactive surface inside the library — consumers shouldn't be more accessible than the views they're built on. Plus a Dynamic Type pass and Reduce-Motion gating on internal animations. The library ships exactly one `.accessibility*` call today, so this is a from-scratch sweep. Five tiers grouped by surface (see DESIGN.md for the full RFC):
 
