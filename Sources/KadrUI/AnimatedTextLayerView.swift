@@ -27,8 +27,12 @@ struct AnimatedTextLayerView: View {
 
     let overlay: TextOverlay
 
+    /// v0.11 — under Reduce Motion the text renders in its resting state without
+    /// running the `TextAnimation`'s `CAAnimation`s.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        Bridge(overlay: overlay)
+        Bridge(overlay: overlay, reduceMotion: reduceMotion)
     }
 
     // MARK: - Begin-time remap (pure)
@@ -88,15 +92,16 @@ struct AnimatedTextLayerView: View {
 @available(iOS 16, tvOS 16, visionOS 1, *)
 private struct Bridge: UIViewRepresentable {
     let overlay: TextOverlay
+    let reduceMotion: Bool
 
     func makeUIView(context: Context) -> AnimatedTextHostView {
         let view = AnimatedTextHostView()
-        view.apply(overlay: overlay)
+        view.apply(overlay: overlay, reduceMotion: reduceMotion)
         return view
     }
 
     func updateUIView(_ uiView: AnimatedTextHostView, context: Context) {
-        uiView.apply(overlay: overlay)
+        uiView.apply(overlay: overlay, reduceMotion: reduceMotion)
     }
 }
 
@@ -118,10 +123,10 @@ final class AnimatedTextHostView: UIView {
         textLayer.frame = bounds
     }
 
-    func apply(overlay: TextOverlay) {
+    func apply(overlay: TextOverlay, reduceMotion: Bool) {
         AnimatedTextLayerView.configure(layer: textLayer, with: overlay)
         textLayer.removeAllAnimations()
-        if let animation = overlay.textAnimation {
+        if !reduceMotion, let animation = overlay.textAnimation {
             let now = CACurrentMediaTime()
             for anim in animation.makeAnimations(for: textLayer) {
                 anim.beginTime = AnimatedTextLayerView.remappedBeginTime(anim.beginTime, now: now)
@@ -136,15 +141,16 @@ final class AnimatedTextHostView: UIView {
 @available(macOS 13, *)
 private struct Bridge: NSViewRepresentable {
     let overlay: TextOverlay
+    let reduceMotion: Bool
 
     func makeNSView(context: Context) -> AnimatedTextHostView {
         let view = AnimatedTextHostView()
-        view.apply(overlay: overlay)
+        view.apply(overlay: overlay, reduceMotion: reduceMotion)
         return view
     }
 
     func updateNSView(_ nsView: AnimatedTextHostView, context: Context) {
-        nsView.apply(overlay: overlay)
+        nsView.apply(overlay: overlay, reduceMotion: reduceMotion)
     }
 }
 
@@ -167,10 +173,10 @@ final class AnimatedTextHostView: NSView {
         textLayer.frame = bounds
     }
 
-    func apply(overlay: TextOverlay) {
+    func apply(overlay: TextOverlay, reduceMotion: Bool) {
         AnimatedTextLayerView.configure(layer: textLayer, with: overlay)
         textLayer.removeAllAnimations()
-        if let animation = overlay.textAnimation {
+        if !reduceMotion, let animation = overlay.textAnimation {
             let now = CACurrentMediaTime()
             for anim in animation.makeAnimations(for: textLayer) {
                 anim.beginTime = AnimatedTextLayerView.remappedBeginTime(anim.beginTime, now: now)
