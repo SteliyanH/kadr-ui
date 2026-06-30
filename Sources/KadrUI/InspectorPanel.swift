@@ -308,6 +308,7 @@ private struct SliderRow: View {
             Text(label)
                 .frame(width: 90, alignment: .leading)
                 .font(.subheadline)
+                .accessibilityHidden(true)
             Slider(
                 value: Binding(
                     get: { value.clamped(to: range) },
@@ -315,9 +316,15 @@ private struct SliderRow: View {
                 ),
                 in: range
             )
+            // v0.11 — the Slider is natively adjustable; give it the row's label and a
+            // formatted value so VoiceOver speaks "Opacity, 0.50" instead of a bare
+            // number. The flanking Text views are decorative duplicates.
+            .accessibilityLabel(label)
+            .accessibilityValue(formatted(value))
             Text(formatted(value))
                 .frame(width: 56, alignment: .trailing)
                 .font(.caption.monospacedDigit())
+                .accessibilityHidden(true)
         }
     }
 

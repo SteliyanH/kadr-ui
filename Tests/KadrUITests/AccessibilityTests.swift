@@ -116,6 +116,39 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertNoThrow(try view.inspect())
     }
 
+    // MARK: - Tier 3: inspector panels + caption editor
+
+    func testInspectorPanelWithSlidersBuilds() throws {
+        let id = ClipID("sel")
+        let video = Video {
+            ImageClip(PlatformImage(), duration: 1.0).id(id)
+        }
+        let panel = InspectorPanel(video, selectedClipID: .constant(id))
+        XCTAssertNoThrow(try panel.inspect())
+    }
+
+    func testOverlayInspectorWithControlsBuilds() throws {
+        let view = OverlayInspectorPanel(sampleOverlayVideo(), selectedOverlayID: .constant(LayerID("title")))
+        XCTAssertNoThrow(try view.inspect())
+    }
+
+    func testCaptionEditorWithCuesAndPlayheadBuilds() throws {
+        let cue = Caption(
+            text: "Hello",
+            timeRange: CMTimeRange(
+                start: CMTime(seconds: 0.5, preferredTimescale: 600),
+                duration: CMTime(seconds: 1.0, preferredTimescale: 600)
+            )
+        )
+        let view = CaptionEditor(
+            captions: [cue],
+            compositionDuration: CMTime(seconds: 10, preferredTimescale: 600),
+            currentTime: .constant(CMTime(seconds: 1, preferredTimescale: 600)),
+            onUpdate: { _ in }
+        )
+        XCTAssertNoThrow(try view.inspect())
+    }
+
     // MARK: - Adjustable-action step constants
 
     func testAccessibilityStepConstantsAreSane() {

@@ -264,6 +264,7 @@ private struct OverlaySliderRow: View {
             Text(label)
                 .frame(width: 90, alignment: .leading)
                 .font(.subheadline)
+                .accessibilityHidden(true)
             Slider(
                 value: Binding(
                     get: { min(max(value, range.lowerBound), range.upperBound) },
@@ -271,9 +272,13 @@ private struct OverlaySliderRow: View {
                 ),
                 in: range
             )
+            // v0.11 — label + formatted value on the natively-adjustable Slider.
+            .accessibilityLabel(label)
+            .accessibilityValue(String(format: "%.2f", value))
             Text(String(format: "%.2f", value))
                 .frame(width: 56, alignment: .trailing)
                 .font(.caption.monospacedDigit())
+                .accessibilityHidden(true)
         }
     }
 }
@@ -300,5 +305,6 @@ private struct OverlayTextField: View {
             .onSubmit {
                 if draft != text { onCommit(draft) }
             }
+            .accessibilityLabel("Overlay text")
     }
 }
