@@ -4,6 +4,30 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-06-30
+
+Library accessibility sweep. The library shipped exactly one `.accessibility*` call before this cycle; v0.11 brings VoiceOver labels / values / hints + adjustable actions to every interactive surface, a Dynamic Type audit, and Reduce-Motion gating. **No visual change** — all snapshot baselines pass unchanged; this is additive accessibility metadata, no behavior or API change. Four implementation tiers + release. Consumers shouldn't be more accessible than the views they build on; this lifts that floor for every downstream app.
+
+### Accessibility
+
+- **Timeline + overlay canvas (Tier 1).** Clips are labelled elements (kind + position) carrying duration value, selected/button traits, and select/reorder hints; **trim handles** and the **scrub strip / playhead** get `.accessibilityAdjustableAction`s so the drag-only controls are VoiceOver-operable; transitions and lane labels are announced; `OverlayHost` overlays get per-overlay labels (incl. text content) + opacity value + drag hint.
+- **Editors with control points (Tier 2).** `KeyframeEditor` / `OverlayKeyframeEditor` / `SpeedCurveEditor` markers are labelled, value-bearing, and adjustable — swipe retimes (or, for the speed curve, changes the multiplier); a `"Remove"` custom action replaces the long-press. Tap-to-add rows are now activatable elements.
+- **Inspector panels + caption editor (Tier 3).** Every slider speaks its label + formatted value via the natively-adjustable `Slider`; `CaptionEditor`'s icon/arrow-only buttons get real labels (`"Delete cue N"`, `"Set start/end to playhead"`), and timestamp fields get `"<Start|End> time"` labels + the value in seconds.
+- **Cross-cutting (Tier 4).** **Reduce Motion** gates the timeline's playhead-recenter / reorder transitions and `AnimatedTextLayerView`'s text animation (rest state instead). Media views get labels (`"Loading preview"` / `"Preview failed to load"`, a `"Thumbnail filmstrip"` summary, decorative waveform). Pinch-zoom is exposed as `"Zoom in"` / `"Zoom out"` rotor actions.
+
+### Dynamic Type
+
+Audited: the library's chrome already uses scaling semantic fonts (`.caption` / `.caption2` / `.subheadline`). The only hardcoded `.system(size:)` is overlay *content* rendered to match the exported video's text size, which correctly does not scale with the OS text setting. No changes required.
+
+### Tests
+
+`AccessibilityTests` (+19): pure label/value/zoom seams + `inspect()` build smokes across all four tiers. Suite 324 swift-testing + 34 XCTest, 0 failures; the 8 visual snapshot baselines are unchanged (proof the a11y metadata didn't alter rendering).
+
+### Notes
+
+- **Manual pass required before adopting in an accessibility-critical app.** `ViewInspector` confirms the modifiers are *attached* but can't verify VoiceOver *speaks* them sensibly or that adjustable actions fire end-to-end. A manual VoiceOver + Reduce-Motion walkthrough is the intended final check and is a release-checklist item, not something the automated suite covers.
+- No new public API; no Kadr-surface requirement change (still ≥ 0.11.0).
+
 ## [0.10.2] - 2026-05-19
 
 Audio trim handles. Single-tier patch; no breaking changes. Pairs with **reels-studio v0.7 Tier 1** which wires the callback to `ProjectStore.applyMusicTrim` / `applySFXTrim`.
