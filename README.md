@@ -93,6 +93,7 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.8.0 | ≥ 0.10.0 |
 | 0.9.0 / 0.9.1 / 0.9.2 | ≥ 0.10.1 *(uses animation-clearing modifiers)* |
 | 0.10.0 / 0.10.1 / 0.10.2 | ≥ 0.11.0 *(uses `Speed` enum + `FilterID` keyed API)* |
+| 0.11.0 | ≥ 0.11.0 *(accessibility sweep — no new Kadr surface)* |
 
 Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
 
@@ -104,7 +105,7 @@ The previous `Examples/SimpleViewer/` snippet has been removed in favor of the s
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones. Latest: **v0.10.2** — audio trim handles on `TimelineView` (`AudioTrimEvent` Sendable payload + `onAudioTrim(_:)` modifier, drag-handle render path on `AudioTrack` rows, default-nil callback keeps the no-trim path pixel-identical to pre-v0.10.2). Recently shipped: v0.10.0 API hardening (`Sendable` event-struct callbacks on `TimelineView`, `OverlayHost` multi-select bindings + selection ring) and v0.10.1 snapshot + gesture-driver test infrastructure (swift-snapshot-testing + ViewInspector as test-only deps, 8 visual baselines + 9 attachment smokes, custom `renderForSnapshot(_:size:)` SwiftUI→NSImage bridge for macOS). Next: v0.11 library-level accessibility sweep. See [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library — KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones. Latest: **v0.11.0** — library accessibility sweep. VoiceOver labels / values / hints + adjustable actions across every interactive surface (timeline clips & trim handles, scrub/playhead, keyframe & speed-curve markers, inspector sliders, caption fields), Reduce-Motion gating on internal animations, and media-view labels. No visual change (all snapshot baselines unchanged) and no new public API. Recently shipped: v0.10.2 audio trim handles, v0.10.0 API hardening, and v0.10.1 snapshot + gesture-driver test infrastructure (swift-snapshot-testing + ViewInspector). Next: v0.12 `@Observable` migration (when the iOS 17 floor moves). See [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library — KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
 
 ## License
 
