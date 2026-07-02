@@ -10,7 +10,6 @@ import AppKit
 // `PlatformColor` (UIColor / NSColor). Internal — these are package-internal helpers,
 // not part of the public API.
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension Image {
     init(platformImage: PlatformImage) {
         #if canImport(UIKit)
@@ -21,7 +20,6 @@ extension Image {
     }
 }
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension Color {
     init(platformColor: PlatformColor) {
         #if canImport(UIKit)

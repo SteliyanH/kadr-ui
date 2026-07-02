@@ -41,7 +41,6 @@ public enum KeyframeProperty: Sendable, Hashable {
 ///     )
 /// }
 /// ```
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct KeyframeEditor: View {
 
     private let video: Video
@@ -217,7 +216,6 @@ public struct KeyframeEditor: View {
 
 // MARK: - Pure helpers
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension KeyframeEditor {
 
     /// Seconds a keyframe retime adjustable action nudges by, per VoiceOver

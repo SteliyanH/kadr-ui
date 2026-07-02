@@ -87,7 +87,6 @@ extension AudioWaveform {
 /// Internal so kadr-ui owns the visual style. Custom waveform rendering is one of
 /// the things the next minor version may expose more directly; for now `TimelineView`
 /// uses this shape with a fixed white-on-block fill.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 struct AudioWaveformShape: Shape {
 
     let peaks: [Float]

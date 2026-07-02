@@ -42,7 +42,6 @@ import CoreMedia
 /// for quick-add UX where the consumer hasn't sized the overlay yet, but **not** a
 /// guaranteed match against export rendering. Set `.size(...)` explicitly on the
 /// overlay if pixel alignment in preview matters.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct OverlayHost: View {
 
     /// Strategy for fitting the composition's display rectangle inside the host's bounds.
@@ -365,7 +364,6 @@ public struct OverlayHost: View {
 
 // MARK: - Gesture modifiers
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension OverlayHost {
 
     /// Attach a tap handler that fires with the tapped overlay's ``Kadr/LayerID``.

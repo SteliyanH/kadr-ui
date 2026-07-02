@@ -33,7 +33,6 @@ import Kadr
 /// fingerprint over `clips.count`, `overlays.count`, `audioTracks.count`, and `duration`. For finer
 /// control (e.g. reload after editing a clip's `trimRange`), pass a `reloadToken` whose value changes
 /// when you want the player rebuilt.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct VideoPreview: View {
 
     private let video: Video

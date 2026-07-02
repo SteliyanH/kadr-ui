@@ -270,7 +270,7 @@ struct SpeedCurveEditorTests {
             .at(1.5, value: 0.5),
             .at(3.0, value: 1.0)
         ], timing: .easeInOut)
-        let clip = videoClip().speed(curve: curve)
+        let clip = videoClip().speed(.curved(curve))
         let time = Binding<CMTime>.constant(cmt(1.0))
         let view = SpeedCurveEditor(clip: clip, currentTime: time, onUpdate: { _ in })
         _ = view.body
