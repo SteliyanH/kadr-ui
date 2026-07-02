@@ -22,7 +22,6 @@ import AppKit
 /// finishes immediately. The bridge shifts every animation's `beginTime` by
 /// `CACurrentMediaTime() - AVCoreAnimationBeginTimeAtZero` so a fresh playthrough
 /// starts now and any positive offset relative to t=0 is preserved.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 struct AnimatedTextLayerView: View {
 
     let overlay: TextOverlay
@@ -89,7 +88,6 @@ struct AnimatedTextLayerView: View {
 
 #if canImport(UIKit)
 
-@available(iOS 16, tvOS 16, visionOS 1, *)
 private struct Bridge: UIViewRepresentable {
     let overlay: TextOverlay
     let reduceMotion: Bool
@@ -105,7 +103,6 @@ private struct Bridge: UIViewRepresentable {
     }
 }
 
-@available(iOS 16, tvOS 16, visionOS 1, *)
 final class AnimatedTextHostView: UIView {
     private let textLayer = CATextLayer()
 
@@ -138,7 +135,6 @@ final class AnimatedTextHostView: UIView {
 
 #elseif canImport(AppKit)
 
-@available(macOS 13, *)
 private struct Bridge: NSViewRepresentable {
     let overlay: TextOverlay
     let reduceMotion: Bool
@@ -154,7 +150,6 @@ private struct Bridge: NSViewRepresentable {
     }
 }
 
-@available(macOS 13, *)
 final class AnimatedTextHostView: NSView {
     private let textLayer = CATextLayer()
 

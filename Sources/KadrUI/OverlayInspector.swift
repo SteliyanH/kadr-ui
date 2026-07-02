@@ -19,7 +19,6 @@ public enum OverlayTextAnimationKind: Sendable, Equatable {
 
 /// Pure helpers used by ``OverlayInspectorPanel``. Separated so they're
 /// testable without driving SwiftUI.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension InspectorPanel {
 
     /// Look up an overlay in a composition by ``Kadr/LayerID``. Returns the
@@ -78,7 +77,6 @@ extension InspectorPanel {
 /// **Read-only model.** Edits surface through callbacks; the consumer rebuilds
 /// the `Video`. Pair with a parent state container the same way ``InspectorPanel``
 /// is wired to a clip-selection binding.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct OverlayInspectorPanel: View {
 
     private let video: Video
@@ -207,7 +205,6 @@ public struct OverlayInspectorPanel: View {
 
 // MARK: - Pickerable animation presets
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension OverlayInspectorPanel {
 
     nonisolated public static let animationPresets: [(label: String, kind: OverlayTextAnimationKind)] = [
@@ -243,7 +240,6 @@ extension OverlayInspectorPanel {
 
 // MARK: - Internal subviews (overlay-specific to keep clip-side untouched)
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct OverlaySectionHeader: View {
     let title: String
     init(_ title: String) { self.title = title }
@@ -252,7 +248,6 @@ private struct OverlaySectionHeader: View {
     }
 }
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct OverlaySliderRow: View {
     let label: String
     let value: Double
@@ -283,7 +278,6 @@ private struct OverlaySliderRow: View {
     }
 }
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct OverlayTextField: View {
     let text: String
     let onCommit: (String) -> Void
@@ -299,7 +293,7 @@ private struct OverlayTextField: View {
     var body: some View {
         TextField("Text", text: $draft, axis: .vertical)
             .lineLimit(1...3)
-            .onChange(of: text) { newValue in
+            .onChange(of: text) { _, newValue in
                 if draft != newValue { draft = newValue }
             }
             .onSubmit {

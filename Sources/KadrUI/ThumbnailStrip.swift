@@ -30,7 +30,6 @@ import AppKit
 ///
 /// **Empty composition.** If ``Kadr/Video/duration`` is zero (e.g. an untrimmed
 /// `VideoClip` whose asset hasn't been loaded), the strip renders nothing.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct ThumbnailStrip: View {
 
     private let video: Video

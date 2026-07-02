@@ -1,7 +1,7 @@
 # KadrUI
 
 [![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%2016+%20|%20macOS%2013+%20|%20tvOS%2016+%20|%20visionOS%201+-blue.svg)](https://developer.apple.com)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%2017+%20|%20macOS%2014+%20|%20tvOS%2017+%20|%20visionOS%201+-blue.svg)](https://developer.apple.com)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
 **SwiftUI components for [Kadr](https://github.com/SteliyanH/kadr) — preview, scrub, and overlay-edit `Video` compositions in your own UI.**
@@ -94,8 +94,9 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.9.0 / 0.9.1 / 0.9.2 | ≥ 0.10.1 *(uses animation-clearing modifiers)* |
 | 0.10.0 / 0.10.1 / 0.10.2 | ≥ 0.11.0 *(uses `Speed` enum + `FilterID` keyed API)* |
 | 0.11.0 | ≥ 0.11.0 *(accessibility sweep — no new Kadr surface)* |
+| 0.12.0 | ≥ 0.15.0 *(iOS 17 floor; Kadr 0.15 floor + 0.14 `Speed` enum-only)* |
 
-Same platform floor as Kadr: iOS 16+ / macOS 13+ / tvOS 16+ / visionOS 1+, Swift 6.0, strict concurrency.
+Same platform floor as Kadr: iOS 17+ / macOS 14+ / tvOS 17+ / visionOS 1+, Swift 6.0, strict concurrency. *(Floor raised in v0.12.0 — was iOS 16 / macOS 13. Stay on `0.11.x` for the iOS 16 floor.)*
 
 ## Example app
 

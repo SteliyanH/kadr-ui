@@ -40,7 +40,6 @@ import Kadr
 /// and trim) apply on the implicit-chain lane in both modes — reorder is chain-aware,
 /// so dragging a chain clip never disturbs Track or free-floater positions in the full
 /// `video.clips` array (added in v0.5.1). Other lanes remain read-only.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct TimelineView: View {
 
     /// v0.11 — when the system "Reduce Motion" setting is on, the timeline's
@@ -418,7 +417,7 @@ public struct TimelineView: View {
                             .allowsHitTesting(false)
                     }
                 }
-                .onChange(of: currentTime.wrappedValue) { _ in
+                .onChange(of: currentTime.wrappedValue) { _, _ in
                     if reduceMotion {
                         proxy.scrollTo(Self.playheadAnchorID, anchor: .center)
                     } else {
@@ -456,7 +455,6 @@ public struct TimelineView: View {
     /// - Parameter enabled: Pass `false` to opt out without removing the
     ///   modifier (e.g., gated on a per-project setting).
     /// - Returns: A copy of the timeline with the modifier applied.
-    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
     public func fixedCenterPlayhead(_ enabled: Bool = true) -> TimelineView {
         var copy = self
         copy.fixedCenterPlayheadEnabled = enabled
@@ -465,9 +463,10 @@ public struct TimelineView: View {
 
     /// Pinch-to-zoom that mutates the bound `TimelineZoom`. Captures the
     /// pre-gesture density on first `onChanged` so subsequent updates multiply
-    /// from a stable base; clears on `onEnded`. Uses `MagnificationGesture` for
-    /// iOS 16 / macOS 13 deployment-floor compatibility (the iOS-17
-    /// `MagnifyGesture` raises the floor).
+    /// from a stable base; clears on `onEnded`. Still on `MagnificationGesture`
+    /// — it isn't deprecated on the current SDK and needs no behavior change;
+    /// adopting the iOS-17 `MagnifyGesture` is a possible future cleanup that
+    /// warrants manual pinch QA.
     private func zoomGesture(totalSeconds: Double) -> some Gesture {
         MagnificationGesture(minimumScaleDelta: 0.01)
             .onChanged { magnification in
@@ -515,7 +514,6 @@ public struct TimelineView: View {
     ///         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     ///     }
     /// ```
-    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
     public func onZoomSnap(_ action: @escaping (ZoomSnapThreshold) -> Void) -> TimelineView {
         var copy = self
         copy.onZoomSnap = action
@@ -538,7 +536,6 @@ public struct TimelineView: View {
     /// No payload — consumers only need to know "the drag crossed a boundary".
     /// An index-bearing overload may follow if a real consumer surfaces a use
     /// case for the target index.
-    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
     public func onClipDragSnap(_ action: @escaping () -> Void) -> TimelineView {
         var copy = self
         copy.onClipDragSnap = action
@@ -558,7 +555,6 @@ public struct TimelineView: View {
     ///         multiSelected.insert(id)
     ///     }
     /// ```
-    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
     public func onLongPressClip(_ action: @escaping (ClipID) -> Void) -> TimelineView {
         var copy = self
         copy.onLongPressClip = action
@@ -595,7 +591,6 @@ public struct TimelineView: View {
     /// ```
     ///
     /// Added in v0.10.2.
-    @available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
     public func onAudioTrim(_ action: @escaping (AudioTrimEvent) -> Void) -> TimelineView {
         var copy = self
         copy.onAudioTrim = action
@@ -1853,7 +1848,6 @@ public struct TimelineView: View {
 
 // MARK: - Triangle shape for the scrub-strip playhead marker
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct Triangle: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()

@@ -26,7 +26,6 @@ public enum OverlayProperty: Sendable, Hashable {
 ///
 /// **Read-only model.** Edits surface through the three callbacks; the consumer
 /// rebuilds the `Video` with the new animation.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct OverlayKeyframeEditor: View {
 
     private let video: Video
@@ -180,7 +179,6 @@ public struct OverlayKeyframeEditor: View {
 
 // MARK: - Pure helpers
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension OverlayKeyframeEditor {
 
     /// The keyframe-able properties for an overlay. Pure, testable. Returns an

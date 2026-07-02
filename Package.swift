@@ -4,16 +4,16 @@ import PackageDescription
 let package = Package(
     name: "KadrUI",
     platforms: [
-        .iOS(.v16),
-        .macOS(.v13),
-        .tvOS(.v16),
+        .iOS(.v17),
+        .macOS(.v14),
+        .tvOS(.v17),
         .visionOS(.v1)
     ],
     products: [
         .library(name: "KadrUI", targets: ["KadrUI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/SteliyanH/kadr.git", from: "0.11.0"),
+        .package(url: "https://github.com/SteliyanH/kadr.git", from: "0.15.0"),
         // v0.10.1 — visual-regression baselines on the editor views. Test-
         // only; main library has no third-party deps.
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.0"),

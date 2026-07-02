@@ -10,7 +10,6 @@ import Foundation
 /// thresholds because it owns the zoom math; consumers can read the list to
 /// label their UI but can't yet pass a custom list (deferred to v0.9.x if
 /// community demand surfaces).
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct ZoomSnapThreshold: Sendable, Hashable {
 
     /// Pixels-per-second density at which the threshold sits. Compared against

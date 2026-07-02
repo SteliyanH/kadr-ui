@@ -11,7 +11,7 @@ import Kadr
 /// **Read-only model.** The editor never mutates the clip directly — `Video` is
 /// immutable. Edits surface through ``SpeedCurveEditor/init(clip:currentTime:height:onUpdate:)``'s
 /// `onUpdate` callback as a fresh ``Kadr/Animation`` value (or `nil` to clear);
-/// the consumer rebuilds the clip via `clip.speed(curve:)` or `clip.speed(_:)`.
+/// the consumer rebuilds the clip via `clip.speed(.curved(_:))` or `clip.speed(.flat(_:))`.
 ///
 /// **Bounds.** Multipliers clamp to `0.25...4.0` per kadr's documented range.
 /// Out-of-range values entered programmatically clamp at the boundaries; the
@@ -23,13 +23,12 @@ import Kadr
 ///     currentTime: $playheadTime,
 ///     onUpdate: { newCurve in
 ///         // Rebuild the Video with the new curve. `nil` means clear.
-///         let updated = newCurve.map { selectedVideoClip.speed(curve: $0) }
-///                       ?? selectedVideoClip.speed(1.0)
+///         let updated = newCurve.map { selectedVideoClip.speed(.curved($0)) }
+///                       ?? selectedVideoClip.speed(.flat(1.0))
 ///     }
 /// )
 /// .frame(height: 80)
 /// ```
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct SpeedCurveEditor: View {
 
     private let clip: VideoClip
@@ -59,7 +58,7 @@ public struct SpeedCurveEditor: View {
     ///   - onUpdate: Fired when the user adds, removes, retimes, or rescales
     ///     a keyframe — or changes the timing function. Receives a fresh
     ///     ``Kadr/Animation`` (or `nil` to clear). Consumer rebuilds the
-    ///     clip via `clip.speed(curve:)` or `clip.speed(_:)`.
+    ///     clip via `clip.speed(.curved(_:))` or `clip.speed(.flat(_:))`.
     public init(
         clip: VideoClip,
         currentTime: Binding<CMTime>? = nil,
@@ -297,7 +296,6 @@ public struct SpeedCurveEditor: View {
 
 // MARK: - Pure helpers
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension SpeedCurveEditor {
 
     /// Multiplier step a marker's adjustable action nudges by, per VoiceOver
@@ -458,7 +456,7 @@ extension SpeedCurveEditor {
 
     /// Preset list rendered in the timing-function picker. Cubic Bézier and
     /// Custom are intentionally absent — consumers wanting either build the
-    /// `TimingFunction` themselves and pass via `clip.speed(curve:)`.
+    /// `TimingFunction` themselves and pass via `clip.speed(.curved(_:))`.
     nonisolated public static let timingPresets: [(String, TimingFunction)] = [
         ("Linear",        .linear),
         ("Ease In",       .easeIn),
