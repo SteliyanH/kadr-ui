@@ -27,7 +27,6 @@ import Kadr
 ///     }
 /// )
 /// ```
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct CaptionEditor: View {
 
     private let captions: [Caption]
@@ -222,7 +221,6 @@ public struct CaptionEditor: View {
 
 // MARK: - Pure helpers
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension CaptionEditor {
 
     /// Sort cues by `timeRange.start`. Stable for cues with identical starts —
@@ -287,7 +285,6 @@ extension CaptionEditor {
 
 // MARK: - Internal subviews
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct CueTextField: View {
     let text: String
     let onCommit: (String) -> Void
@@ -304,7 +301,7 @@ private struct CueTextField: View {
         TextField("Cue text", text: $draft, axis: .vertical)
             .font(.body)
             .lineLimit(1...3)
-            .onChange(of: text) { newValue in
+            .onChange(of: text) { _, newValue in
                 if draft != newValue { draft = newValue }
             }
             .onSubmit { commit() }
@@ -315,7 +312,6 @@ private struct CueTextField: View {
     }
 }
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct TimestampField: View {
     let seconds: Double
     let onCommit: (Double) -> Void
@@ -332,7 +328,7 @@ private struct TimestampField: View {
         TextField("0.00", text: $draft)
             .font(.caption.monospacedDigit())
             .multilineTextAlignment(.trailing)
-            .onChange(of: seconds) { newValue in
+            .onChange(of: seconds) { _, newValue in
                 let formatted = String(format: "%.2f", newValue)
                 if draft != formatted { draft = formatted }
             }

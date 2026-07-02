@@ -127,9 +127,16 @@ Suite +2 tests (event shape + gesture wiring); 322 → 324 across 25 suites. Pai
 
 Internal view modification — minimal-to-no new public API (accessibility is automatic, not opt-in).
 
-## v0.12.0 — `@Observable` migration *(planned)*
+## v0.12.0 — iOS 17 platform floor ✓ shipped
 
-Triggered when the iOS 17 floor moves (paired with reels-studio v0.8). Internal `ObservableObject` → `@Observable`; mechanical.
+Floor raised to **iOS 17 / macOS 14 / tvOS 17 / visionOS 1** as the middle step of a coordinated stack-wide move (kadr v0.15 → **kadr-ui v0.12** → reels-studio `@Observable` migration). Concretely:
+
+- `Package.swift` platforms bumped; Kadr floor bumped to **≥ 0.15.0**.
+- Dropped 40 now-redundant `@available(iOS 16, …)` annotations across the library.
+- Migrated 4 `onChange(of:perform:)` call sites to the iOS-17 two-parameter `onChange` (the only new SDK deprecation the floor surfaced).
+- Migrated a lingering `.speed(curve:)` test call to the `Speed` enum (Kadr removed the deprecated overloads in 0.14).
+
+No behavior change; snapshot baselines unchanged. **Correction to the original roadmap:** this entry was pencilled in as the `@Observable` migration, but KadrUI holds no `ObservableObject`s — it's pure value-type SwiftUI. The actual `@Observable` migration lives in **reels-studio** (which owns the app's stores) and rides on this floor move.
 
 ## v1.0.0 — Production Ready
 

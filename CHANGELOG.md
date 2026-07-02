@@ -4,6 +4,29 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-07-02
+
+Platform floor raised to **iOS 17 / macOS 14 / tvOS 17 / visionOS 1** — the middle step of a coordinated stack-wide move (kadr v0.15 → kadr-ui v0.12 → reels-studio `@Observable` migration). No behavior change; all snapshot baselines unchanged.
+
+> **Roadmap correction:** this version was originally pencilled in as the `@Observable` migration, but KadrUI holds no `ObservableObject`s (it's pure value-type SwiftUI with `@State` / `@Binding`). The `@Observable` migration actually lives in **reels-studio**; KadrUI's role is this floor bump, which unblocks it.
+
+### Changed
+
+- **`Package.swift` platforms** → `.iOS(.v17)` / `.macOS(.v14)` / `.tvOS(.v17)` / `.visionOS(.v1)` (was iOS 16 / macOS 13 / tvOS 16); **Kadr dependency floor → ≥ 0.15.0**.
+- Migrated 4 `onChange(of:perform:)` call sites (`TimelineView`, `OverlayInspector`, `CaptionEditor` ×2) to the iOS-17 two-parameter `onChange(of:_:)` — the only new SDK deprecation the floor surfaced.
+
+### Removed
+
+- 40 now-redundant `@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)` (and UIKit/AppKit-specific variants) annotations across all 14 source files — the package floor already exceeds them.
+
+### Fixed
+
+- Migrated a lingering `SpeedCurveEditorTests` `.speed(curve:)` call to `.speed(.curved(_:))`, and corrected stale `SpeedCurveEditor` docstrings — Kadr removed the deprecated `speed(_:)` / `speed(curve:)` overloads in 0.14, so bumping the Kadr floor surfaced them.
+
+### Compatibility
+
+Requires **Kadr ≥ 0.15.0**. Breaking at the deployment-target level; consumers needing the iOS 16 floor stay on the **0.11.x** line.
+
 ## [0.11.0] - 2026-06-30
 
 Library accessibility sweep. The library shipped exactly one `.accessibility*` call before this cycle; v0.11 brings VoiceOver labels / values / hints + adjustable actions to every interactive surface, a Dynamic Type audit, and Reduce-Motion gating. **No visual change** — all snapshot baselines pass unchanged; this is additive accessibility metadata, no behavior or API change. Four implementation tiers + release. Consumers shouldn't be more accessible than the views they build on; this lifts that floor for every downstream app.

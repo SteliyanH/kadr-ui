@@ -27,7 +27,6 @@ import Kadr
 /// can't address (a transition, or a `ClipID` that doesn't appear in `video.clips`), the
 /// panel renders an empty placeholder. Apps typically hide it with `.opacity` / `.frame`
 /// based on their own state.
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 public struct InspectorPanel: View {
 
     private let video: Video
@@ -175,7 +174,6 @@ public struct InspectorPanel: View {
 
 // MARK: - Pure helpers
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 extension InspectorPanel {
 
     /// Look up a clip in a composition by ``Kadr/ClipID``. Searches the top-level chain
@@ -286,7 +284,6 @@ extension InspectorPanel {
 
 // MARK: - Subviews
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct SectionHeader: View {
     let title: String
     init(_ title: String) { self.title = title }
@@ -296,7 +293,6 @@ private struct SectionHeader: View {
     }
 }
 
-@available(iOS 16, macOS 13, tvOS 16, visionOS 1, *)
 private struct SliderRow: View {
     let label: String
     let value: Double
