@@ -138,7 +138,7 @@ Floor raised to **iOS 17 / macOS 14 / tvOS 17 / visionOS 1** as the middle step 
 
 No behavior change; snapshot baselines unchanged. **Correction to the original roadmap:** this entry was pencilled in as the `@Observable` migration, but KadrUI holds no `ObservableObject`s — it's pure value-type SwiftUI. The actual `@Observable` migration lives in **reels-studio** (which owns the app's stores) and rides on this floor move.
 
-## v0.13.0 — Appearance surface
+## v0.13.0 — Appearance surface ✓ shipped
 
 `KadrAppearance`, propagated through the environment, so a consuming app can style the views KadrUI draws. Additive and non-breaking: every default reproduces the pre-0.13 rendering, and the eight snapshot baselines pass unchanged as proof.
 

@@ -4,7 +4,7 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — appearance surface
+## [0.13.0] - 2026-08-17
 
 Adds `KadrAppearance`: an environment-propagated set of appearance tokens so a consuming app can style the views KadrUI draws. **Additive and non-breaking** — every default reproduces the pre-0.13 rendering verbatim, and the environment default is `.system`.
 
