@@ -4,6 +4,26 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — tap-to-sample
+
+Adds an eyedropper hook to `VideoPreview`, so a consuming app can let the user pick a colour out of the frame. Additive and opt-in: passing no callback attaches no video output and leaves playback exactly as before. Closes [#102](https://github.com/SteliyanH/kadr-ui/issues/102).
+
+### Added
+
+- **`VideoPreview(_:onSampleColor:)`** — a tap on the picture reports a `KadrSampledColor`: the colour under it, plus the normalised point so the caller can draw a reticle.
+- **`KadrSampledColor`** — `Equatable`, `Sendable`; normalised point, top-left origin.
+- **`VideoSampling`** — the aspect-fit geometry and BGRA pixel read, as free functions.
+
+### Notes
+
+- **A tap in a letterbox bar reports nothing.** `nil`, never the surround's black — a caller cannot tell "the bars" from "dark footage", so returning a colour there would be undetectably wrong.
+- **The video output is opt-in.** `AVPlayerItemVideoOutput` makes the decoder hand back every frame in BGRA; callers that never sample should not pay for it.
+- `hasNewPixelBuffer` is deliberately not consulted — it is false on a paused player, which is exactly when someone is most likely to be picking a colour.
+
+### Tests
+
+Suite 335 → 347. `VideoSamplingTests` covers the letterbox maths, bar rejection, top-left origin, unresolved `presentationSize`, BGRA channel order and index clamping — all without a player or a decodable asset, so it runs on the hosted runners that cannot decode media.
+
 ## [0.13.0] - 2026-08-17
 
 Adds `KadrAppearance`: an environment-propagated set of appearance tokens so a consuming app can style the views KadrUI draws. **Additive and non-breaking** — every default reproduces the pre-0.13 rendering verbatim, and the environment default is `.system`.
