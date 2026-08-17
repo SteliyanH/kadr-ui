@@ -27,9 +27,20 @@ concurrency:
 jobs:
   test:
     runs-on: macos-15
+
+    # The suite runs in well under a minute. Without a cap, a hung process runs
+    # to GitHub's 360-minute default — six hours of macOS runner time, billed at
+    # 10x the Linux rate, for a job that should be over in one. Not
+    # hypothetical: kadr wedged exactly this way on 2026-08-17 and had to be
+    # cancelled by hand after 33 minutes.
+    timeout-minutes: 10
+
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          # Pinned rather than `latest-stable`, so a red run means the code
+          # changed and not that the runner image moved. 26.3 is what the last
+          # green runs used.
+          xcode-version: '26.3'
       - run: swift test
