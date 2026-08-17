@@ -28,6 +28,9 @@ public enum OverlayProperty: Sendable, Hashable {
 /// rebuilds the `Video` with the new animation.
 public struct OverlayKeyframeEditor: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let video: Video
     private let selectedOverlayID: Binding<LayerID?>
     private let currentTime: Binding<CMTime>
@@ -95,8 +98,8 @@ public struct OverlayKeyframeEditor: View {
             let phSecs = CMTimeGetSeconds(currentTime.wrappedValue)
 
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
+                RoundedRectangle(cornerRadius: appearance.cornerRadius)
+                    .fill(appearance.trackBackground)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         guard phSecs >= 0, phSecs <= totalSeconds else { return }
@@ -109,7 +112,7 @@ public struct OverlayKeyframeEditor: View {
                     .accessibilityAddTraits(.isButton)
 
                 Text(OverlayKeyframeEditor.label(for: property))
-                    .font(.caption)
+                    .font(appearance.trackLabelFont)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 6)
                     .accessibilityHidden(true)
@@ -117,7 +120,7 @@ public struct OverlayKeyframeEditor: View {
                 if phSecs >= 0, phSecs <= totalSeconds {
                     let x = CGFloat(phSecs / totalSeconds) * width
                     Rectangle()
-                        .fill(Color.white.opacity(0.4))
+                        .fill(appearance.trackPlayhead)
                         .frame(width: 1)
                         .position(x: x, y: rowHeight / 2)
                 }
@@ -126,9 +129,7 @@ public struct OverlayKeyframeEditor: View {
                     let key = KeyframeKey(overlayID: overlayID, property: property, timeMs: time.value)
                     let baseX = CGFloat(CMTimeGetSeconds(time) / totalSeconds) * width
                     let dragX = dragOffsetByKey[key] ?? 0
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 10, height: 10)
+                    KeyframeMark(shape: appearance.keyframeMarkShape, color: appearance.keyframeMark, size: 10)
                         .position(x: baseX + dragX, y: rowHeight / 2)
                         .gesture(
                             LongPressGesture(minimumDuration: 0.4)

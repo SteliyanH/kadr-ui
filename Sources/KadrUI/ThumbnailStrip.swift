@@ -32,6 +32,9 @@ import AppKit
 /// `VideoClip` whose asset hasn't been loaded), the strip renders nothing.
 public struct ThumbnailStrip: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let video: Video
     private let count: Int
     private let onThumbnailFailure: ((Int, Error) -> Void)?
@@ -87,7 +90,7 @@ public struct ThumbnailStrip: View {
                 .scaledToFill()
                 .clipped()
         } else {
-            Color.gray.opacity(0.2)
+            appearance.placeholder
         }
     }
 

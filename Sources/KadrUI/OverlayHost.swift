@@ -44,6 +44,9 @@ import CoreMedia
 /// overlay if pixel alignment in preview matters.
 public struct OverlayHost: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     /// Strategy for fitting the composition's display rectangle inside the host's bounds.
     public enum ContentMode: Sendable {
         /// Match the composition's aspect ratio inside the bounds, letterboxing on the
@@ -155,8 +158,8 @@ public struct OverlayHost: View {
             // outside the opacity so the ring stays fully visible even
             // when the overlay itself is partially transparent.
             .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: appearance.cornerRadius)
+                    .stroke(isSelected ? appearance.selectionRing : .clear, lineWidth: appearance.strokeWidth)
             )
             // v0.11 — one labelled element per overlay. Combine the rendered content
             // (e.g. a text overlay's own glyphs) into a single element with an explicit

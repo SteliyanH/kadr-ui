@@ -29,6 +29,9 @@ import Kadr
 /// based on their own state.
 public struct InspectorPanel: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let video: Video
     private let selectedClipID: Binding<ClipID?>
     private let onTransform: ((ClipID, Transform) -> Void)?
@@ -285,15 +288,17 @@ extension InspectorPanel {
 // MARK: - Subviews
 
 private struct SectionHeader: View {
+    @Environment(\.kadrAppearance) private var appearance
     let title: String
     init(_ title: String) { self.title = title }
     var body: some View {
         Text(title)
-            .font(.headline)
+            .font(appearance.panelTitleFont)
     }
 }
 
 private struct SliderRow: View {
+    @Environment(\.kadrAppearance) private var appearance
     let label: String
     let value: Double
     let range: ClosedRange<Double>
@@ -303,7 +308,7 @@ private struct SliderRow: View {
         HStack(spacing: 12) {
             Text(label)
                 .frame(width: 90, alignment: .leading)
-                .font(.subheadline)
+                .font(appearance.panelSectionFont)
                 .accessibilityHidden(true)
             Slider(
                 value: Binding(
@@ -319,7 +324,7 @@ private struct SliderRow: View {
             .accessibilityValue(formatted(value))
             Text(formatted(value))
                 .frame(width: 56, alignment: .trailing)
-                .font(.caption.monospacedDigit())
+                .font(appearance.panelValueFont)
                 .accessibilityHidden(true)
         }
     }

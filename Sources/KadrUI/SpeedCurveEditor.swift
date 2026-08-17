@@ -31,6 +31,9 @@ import Kadr
 /// ```
 public struct SpeedCurveEditor: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let clip: VideoClip
     private let currentTime: Binding<CMTime>?
     private let height: CGFloat
@@ -91,9 +94,9 @@ public struct SpeedCurveEditor: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(SpeedCurveEditor.timingLabel(for: clip.speedCurve?.timing ?? .linear))
-                        .font(.caption)
+                        .font(appearance.trackLabelFont)
                     Image(systemName: "chevron.down")
-                        .font(.caption2)
+                        .font(appearance.clipLabelFont)
                 }
                 .foregroundStyle(.secondary)
             }
@@ -102,7 +105,7 @@ public struct SpeedCurveEditor: View {
                 onUpdate(nil)
             } label: {
                 Text("Clear")
-                    .font(.caption)
+                    .font(appearance.trackLabelFont)
             }
             .disabled(clip.speedCurve == nil)
         }
@@ -120,8 +123,8 @@ public struct SpeedCurveEditor: View {
 
             ZStack(alignment: .topLeading) {
                 // Background — also the "tap empty area to add" target.
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
+                RoundedRectangle(cornerRadius: appearance.cornerRadius)
+                    .fill(appearance.trackBackground)
                     .contentShape(Rectangle())
                     .gesture(
                         SpatialTapGesture()
@@ -133,7 +136,7 @@ public struct SpeedCurveEditor: View {
                 // 1× gridline — the "neutral speed" reference.
                 let baselineY = SpeedCurveEditor.normalizedY(forMultiplier: 1.0) * size.height
                 Rectangle()
-                    .fill(Color.white.opacity(0.25))
+                    .fill(appearance.trackPlayhead.opacity(0.25))
                     .frame(width: size.width, height: 1)
                     .offset(y: size.height - baselineY - 0.5)
                     .allowsHitTesting(false)
@@ -141,7 +144,7 @@ public struct SpeedCurveEditor: View {
                 // Playhead — projected onto clip-local time.
                 if let phX = playheadX(in: size, durationSeconds: durationSeconds) {
                     Rectangle()
-                        .fill(Color.white.opacity(0.4))
+                        .fill(appearance.trackPlayhead)
                         .frame(width: 1, height: size.height)
                         .offset(x: phX)
                         .allowsHitTesting(false)

@@ -43,6 +43,9 @@ public enum KeyframeProperty: Sendable, Hashable {
 /// ```
 public struct KeyframeEditor: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let video: Video
     private let selectedClipID: Binding<ClipID?>
     private let currentTime: Binding<CMTime>
@@ -124,8 +127,8 @@ public struct KeyframeEditor: View {
 
             ZStack(alignment: .leading) {
                 // Row background — tap target for "add at playhead".
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
+                RoundedRectangle(cornerRadius: appearance.cornerRadius)
+                    .fill(appearance.trackBackground)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         let secs = CMTimeGetSeconds(playheadClipRel)
@@ -141,7 +144,7 @@ public struct KeyframeEditor: View {
 
                 // Property label. Hidden from a11y — the row element already names it.
                 Text(KeyframeEditor.label(for: property))
-                    .font(.caption)
+                    .font(appearance.trackLabelFont)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 6)
                     .accessibilityHidden(true)
@@ -151,7 +154,7 @@ public struct KeyframeEditor: View {
                 if phSecs >= 0, phSecs <= clipDurSecs {
                     let x = CGFloat(phSecs / clipDurSecs) * width
                     Rectangle()
-                        .fill(Color.white.opacity(0.4))
+                        .fill(appearance.trackPlayhead)
                         .frame(width: 1)
                         .position(x: x, y: rowHeight / 2)
                 }
@@ -161,9 +164,7 @@ public struct KeyframeEditor: View {
                     let key = KeyframeKey(clipID: clipID, property: property, timeMs: time.value)
                     let baseX = CGFloat(CMTimeGetSeconds(time) / clipDurSecs) * width
                     let dragX = dragOffsetByKey[key] ?? 0
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 10, height: 10)
+                    KeyframeMark(shape: appearance.keyframeMarkShape, color: appearance.keyframeMark, size: 10)
                         .position(x: baseX + dragX, y: rowHeight / 2)
                         .gesture(
                             LongPressGesture(minimumDuration: 0.4)
