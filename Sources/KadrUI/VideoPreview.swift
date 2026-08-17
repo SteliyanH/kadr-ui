@@ -42,6 +42,9 @@ public struct VideoPreview: View {
     private let reloadToken: AnyHashable?
     private let onLoadFailure: ((Error) -> Void)?
     private let onSampleColor: ((KadrSampledColor) -> Void)?
+    private let isPlaying: Binding<Bool>?
+    private let currentTime: Binding<CMTime>?
+    private let loops: Bool
 
     @State private var player: AVPlayer?
     @State private var didFailToLoad = false
@@ -50,6 +53,14 @@ public struct VideoPreview: View {
     /// makes the decoder hand back every frame in BGRA, which costs memory and
     /// bandwidth for callers that never sample — so it is opt-in.
     @State private var videoOutput: AVPlayerItemVideoOutput?
+
+    /// Periodic observer that pushes playback position back into `currentTime`.
+    /// Held so it can be removed — an un-removed observer retains the player.
+    @State private var timeObserver: Any?
+
+    /// Guards the feedback loop between `currentTime` and the observer: without
+    /// it, every tick writes the binding, which seeks, which ticks.
+    @State private var isSeekingFromBinding = false
 
     /// Create a preview for `video`.
     /// - Parameters:
@@ -65,13 +76,28 @@ public struct VideoPreview: View {
     ///     `nil` rather than the surround's black, which would be a colour the
     ///     caller could not tell apart from real footage. Passing `nil` (the
     ///     default) leaves playback untouched and attaches no video output.
+    ///   - isPlaying: Optional two-way playback state. Set it to start or stop;
+    ///     it flips back to `false` on its own when a non-looping composition
+    ///     reaches the end, so a caller's play button does not lie.
+    ///   - currentTime: Optional two-way playhead. Writes seek; playback writes
+    ///     back roughly 10x a second. Share it with `TimelineView`'s
+    ///     `currentTime` and the two stay in step.
+    ///   - loops: When `true`, playback restarts at zero instead of stopping.
+    ///     Deliberately a plain value, not persisted state — looping is a
+    ///     session preference, and the package has no business owning it.
     public init(
         _ video: Video,
+        isPlaying: Binding<Bool>? = nil,
+        currentTime: Binding<CMTime>? = nil,
+        loops: Bool = false,
         reloadToken: AnyHashable? = nil,
         onLoadFailure: ((Error) -> Void)? = nil,
         onSampleColor: ((KadrSampledColor) -> Void)? = nil
     ) {
         self.video = video
+        self.isPlaying = isPlaying
+        self.currentTime = currentTime
+        self.loops = loops
         self.reloadToken = reloadToken
         self.onLoadFailure = onLoadFailure
         self.onSampleColor = onSampleColor
@@ -94,6 +120,26 @@ public struct VideoPreview: View {
                     .accessibilityLabel("Loading preview")
             }
         }
+        .onDisappear {
+            // An un-removed periodic observer retains the player, and with it
+            // the decoded item.
+            if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
+            timeObserver = nil
+        }
+        .onChange(of: isPlaying?.wrappedValue ?? false) { _, playing in
+            guard let player else { return }
+            playing ? player.play() : player.pause()
+        }
+        .onChange(of: currentTime?.wrappedValue ?? .zero) { _, time in
+            guard let player, let currentTime else { return }
+            // Only seek when the caller moved it; the observer's own writes
+            // land within a tick of the player's position.
+            guard abs(CMTimeGetSeconds(player.currentTime()) - CMTimeGetSeconds(time)) > 0.05 else { return }
+            isSeekingFromBinding = true
+            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                isSeekingFromBinding = false
+            }
+        }
         .task(id: identity) {
             player = nil
             didFailToLoad = false
@@ -106,10 +152,44 @@ public struct VideoPreview: View {
                     item.add(output)
                     videoOutput = output
                 }
-                player = AVPlayer(playerItem: item)
+                let newPlayer = AVPlayer(playerItem: item)
+                newPlayer.actionAtItemEnd = loops ? .none : .pause
+                attachTimeObserver(to: newPlayer)
+                player = newPlayer
+                if isPlaying?.wrappedValue == true { newPlayer.play() }
             } catch {
                 didFailToLoad = true
                 onLoadFailure?(error)
+            }
+        }
+    }
+
+    /// Pushes playback position into `currentTime` ~10x a second, and clears
+    /// `isPlaying` when a non-looping composition ends.
+    private func attachTimeObserver(to player: AVPlayer) {
+        guard currentTime != nil || isPlaying != nil || loops else { return }
+
+        let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
+        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+            // Skip the tick that our own seek produced, or the binding would
+            // fight the observer.
+            guard !isSeekingFromBinding else { return }
+
+            if let currentTime, currentTime.wrappedValue != time {
+                currentTime.wrappedValue = time
+            }
+
+            guard let item = player.currentItem, item.duration.isNumeric else { return }
+            let atEnd = time >= item.duration
+            if atEnd {
+                if loops {
+                    player.seek(to: .zero)
+                    player.play()
+                } else if isPlaying?.wrappedValue == true {
+                    // The player pauses itself at the end; reflect that, so a
+                    // caller's play button does not sit stuck on "pause".
+                    isPlaying?.wrappedValue = false
+                }
             }
         }
     }
@@ -178,4 +258,12 @@ public struct VideoPreview: View {
         let durationSeconds: Double
         let reloadToken: AnyHashable?
     }
+}
+
+// MARK: - Test seams
+
+extension VideoPreview {
+    /// Exposes `loops` for tests. The stored property stays private so callers
+    /// cannot mistake it for public API.
+    var loopsForTesting: Bool { loops }
 }
