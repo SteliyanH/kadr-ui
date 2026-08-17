@@ -41,9 +41,15 @@ public struct VideoPreview: View {
     private let video: Video
     private let reloadToken: AnyHashable?
     private let onLoadFailure: ((Error) -> Void)?
+    private let onSampleColor: ((KadrSampledColor) -> Void)?
 
     @State private var player: AVPlayer?
     @State private var didFailToLoad = false
+
+    /// Attached only when sampling is requested. An `AVPlayerItemVideoOutput`
+    /// makes the decoder hand back every frame in BGRA, which costs memory and
+    /// bandwidth for callers that never sample — so it is opt-in.
+    @State private var videoOutput: AVPlayerItemVideoOutput?
 
     /// Create a preview for `video`.
     /// - Parameters:
@@ -53,14 +59,22 @@ public struct VideoPreview: View {
     ///     insufficient — e.g. when you've edited a clip in place. Default `nil`.
     ///   - onLoadFailure: Optional callback invoked on the main actor if
     ///     ``Kadr/Video/makePlayerItem()`` throws. Default `nil`.
+    ///   - onSampleColor: Optional eyedropper. When set, a tap on the picture
+    ///     reports the colour under it plus the normalised point, so the caller
+    ///     can draw a reticle. Taps in the letterbox bars report nothing —
+    ///     `nil` rather than the surround's black, which would be a colour the
+    ///     caller could not tell apart from real footage. Passing `nil` (the
+    ///     default) leaves playback untouched and attaches no video output.
     public init(
         _ video: Video,
         reloadToken: AnyHashable? = nil,
-        onLoadFailure: ((Error) -> Void)? = nil
+        onLoadFailure: ((Error) -> Void)? = nil,
+        onSampleColor: ((KadrSampledColor) -> Void)? = nil
     ) {
         self.video = video
         self.reloadToken = reloadToken
         self.onLoadFailure = onLoadFailure
+        self.onSampleColor = onSampleColor
     }
 
     public var body: some View {
@@ -68,6 +82,7 @@ public struct VideoPreview: View {
             Color.black
             if let player {
                 VideoPlayer(player: player)
+                    .overlay { if onSampleColor != nil { samplingLayer } }
             } else if didFailToLoad {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.title)
@@ -84,12 +99,64 @@ public struct VideoPreview: View {
             didFailToLoad = false
             do {
                 let item = try await video.makePlayerItem()
+                if onSampleColor != nil {
+                    let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+                        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+                    ])
+                    item.add(output)
+                    videoOutput = output
+                }
                 player = AVPlayer(playerItem: item)
             } catch {
                 didFailToLoad = true
                 onLoadFailure?(error)
             }
         }
+    }
+
+    /// Transparent tap target over the picture. Only built when sampling is on,
+    /// so the default preview keeps AVKit's own gesture handling untouched.
+    @ViewBuilder
+    private var samplingLayer: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    // DragGesture with zero distance rather than onTapGesture:
+                    // it reports the location, which is the whole point here.
+                    DragGesture(minimumDistance: 0)
+                        .onEnded { value in sample(at: value.location, in: proxy.size) }
+                )
+                .accessibilityLabel("Sample colour from the frame")
+                .accessibilityHint("Double tap a point in the picture to pick its colour")
+        }
+    }
+
+    /// Resolves a tap to a colour, or does nothing if it cannot.
+    private func sample(at point: CGPoint, in bounds: CGSize) {
+        guard let onSampleColor, let player, let output = videoOutput else { return }
+
+        let presentation = player.currentItem?.presentationSize ?? .zero
+        guard let normalized = VideoSampling.normalizedPoint(
+            forTapAt: point, in: bounds, presentation: presentation
+        ) else { return }   // letterbox bar, or size not resolved yet
+
+        // `hasNewPixelBuffer` is deliberately not consulted: it answers "has the
+        // frame changed since the last copy", which is false on a paused player —
+        // exactly when someone is most likely to be picking a colour.
+        // `copyPixelBuffer` still returns the current frame; a nil result is
+        // handled by the guard.
+        let time = output.itemTime(forHostTime: CACurrentMediaTime())
+        guard let buffer = output.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil),
+              let rgb = VideoSampling.rgb(at: normalized, in: buffer)
+        else { return }
+
+        onSampleColor(
+            KadrSampledColor(
+                color: Color(red: rgb.red, green: rgb.green, blue: rgb.blue),
+                point: normalized
+            )
+        )
     }
 
     /// Coarse fingerprint that drives `.task(id:)`. Changes when the composition's
