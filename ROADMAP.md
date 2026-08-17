@@ -148,6 +148,15 @@ No behavior change; snapshot baselines unchanged. **Correction to the original r
 
 **Still open after this:** [#102](https://github.com/SteliyanH/kadr-ui/issues/102) — `VideoPreview` tap-to-sample, so consumers can build an eyedropper. Unrelated to appearance; it needs a coordinate → pixel mapping the package alone can do correctly, since it owns letterboxing and scale.
 
+## v0.14.0 — Preview interaction ✓ shipped
+
+Two additive hooks on `VideoPreview`, both driven by consumer needs that were unbuildable without them.
+
+- **Tap-to-sample** (#102) — a tap on the picture reports the colour under it plus a normalised point, so an app can build an eyedropper. Taps in the letterbox bars report nothing rather than the surround's black. Geometry lives in `VideoSampling` as free functions, so it is unit-tested on runners that cannot decode media.
+- **Playback control** — `isPlaying` / `currentTime` bindings and a `loops` flag, so an app can build a transport band. `currentTime` is meant to be shared with `TimelineView`'s binding: one playhead, not two that drift. `isPlaying` clears itself at the end of a non-looping composition.
+
+Both default to inert, so v0.13 call sites are unchanged. Suite 335 → 354.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.

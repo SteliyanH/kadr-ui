@@ -4,7 +4,7 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — tap-to-sample and playback control
+## [0.14.0] - 2026-08-17
 
 Adds an eyedropper hook to `VideoPreview`, so a consuming app can let the user pick a colour out of the frame. Additive and opt-in: passing no callback attaches no video output and leaves playback exactly as before. Closes [#102](https://github.com/SteliyanH/kadr-ui/issues/102).
 
