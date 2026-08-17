@@ -4,7 +4,7 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — tap-to-sample
+## [Unreleased] — tap-to-sample and playback control
 
 Adds an eyedropper hook to `VideoPreview`, so a consuming app can let the user pick a colour out of the frame. Additive and opt-in: passing no callback attaches no video output and leaves playback exactly as before. Closes [#102](https://github.com/SteliyanH/kadr-ui/issues/102).
 
@@ -20,9 +20,19 @@ Adds an eyedropper hook to `VideoPreview`, so a consuming app can let the user p
 - **The video output is opt-in.** `AVPlayerItemVideoOutput` makes the decoder hand back every frame in BGRA; callers that never sample should not pay for it.
 - `hasNewPixelBuffer` is deliberately not consulted — it is false on a paused player, which is exactly when someone is most likely to be picking a colour.
 
+### Added — playback control
+
+- **`VideoPreview(_:isPlaying:currentTime:loops:)`** — two-way playback state and playhead, so a consuming app can build a transport band. Share `currentTime` with `TimelineView` and the two stay in step.
+- `isPlaying` **clears itself** when a non-looping composition reaches the end, so a caller's play button cannot sit stuck showing "pause".
+- `loops` is a plain value, not persisted state: looping is a session preference and the package has no business owning it.
+
+Every argument defaults to nil/false, so a v0.13 call site is unchanged and attaches no time observer.
+
+Two things worth knowing if you adopt it: the periodic observer is removed on disappear (an un-removed one retains the player and its decoded item), and seeks from the binding are guarded against the observer's own writes, or the two would fight each tick.
+
 ### Tests
 
-Suite 335 → 347. `VideoSamplingTests` covers the letterbox maths, bar rejection, top-left origin, unresolved `presentationSize`, BGRA channel order and index clamping — all without a player or a decodable asset, so it runs on the hosted runners that cannot decode media.
+Suite 335 → 354. `VideoSamplingTests` covers the letterbox maths, bar rejection, top-left origin, unresolved `presentationSize`, BGRA channel order and index clamping — all without a player or a decodable asset, so it runs on the hosted runners that cannot decode media.
 
 ## [0.13.0] - 2026-08-17
 
