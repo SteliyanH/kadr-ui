@@ -4,6 +4,37 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — appearance surface
+
+Adds `KadrAppearance`: an environment-propagated set of appearance tokens so a consuming app can style the views KadrUI draws. **Additive and non-breaking** — every default reproduces the pre-0.13 rendering verbatim, and the environment default is `.system`.
+
+Motivated by [reels-studio#68](https://github.com/SteliyanH/kadr-reels-studio/pull/68), which applied a design system app-wide and could not reach the editor: nav bar, toolbar, inspectors and sheets migrated, while the timeline kept KadrUI's own red playhead, kind-keyed clip hues and rounded corners. `.tint` was the only channel in. Closes [#101](https://github.com/SteliyanH/kadr-ui/issues/101).
+
+### Added
+
+- **`KadrAppearance`** — `Equatable`, `Sendable` value type carrying geometry (`cornerRadius`, `laneCornerRadius`, `strokeWidth`, `elevation`), timeline colours (`playhead`, `selectionRing`, `trackPlayhead`, `trackBackground`, `laneBackground`, `placeholder`, `waveform`, `overlayLaneFill`, `keyframeMark`), and six type roles (`clipLabelFont`, `timecodeFont`, `trackLabelFont`, `panelTitleFont`, `panelSectionFont`, `panelValueFont`).
+- **`KadrAppearance.ClipColors`** — per-kind cell fills, with `.uniform(_:)` for mono schemes. Named fields rather than a `(any Clip) -> Color` closure, which would be neither `Equatable` nor `Sendable`.
+- **`KadrAppearance.ContentRendering`** — `.color` / `.grayscale` for filmstrip and thumbnail content. A rendering choice rather than a colour, so the package decides where in its pipeline to apply it.
+- **`KadrAppearance.KeyframeMarkShape`** — `.circle` / `.diamond`. A diamond is a square rotated 45°, so hit area and centring are unchanged.
+- **`View.kadrAppearance(_:)`** and **`EnvironmentValues.kadrAppearance`**.
+
+### Changed
+
+- The nine public views (`TimelineView`, `KeyframeEditor`, `OverlayKeyframeEditor`, `SpeedCurveEditor`, `ThumbnailStrip`, `OverlayHost`, `InspectorPanel`, `OverlayInspectorPanel`, `VideoPreview`) read their colours, radii, stroke widths, shadow radius and fonts from the environment instead of literals. No default changed.
+
+### Compatibility
+
+**No consumer action required.** Existing call sites keep their exact rendering. Two design notes worth knowing if you adopt it:
+
+- `laneCornerRadius` is separate from `cornerRadius` because lane grounds sat at `2` while clip cells sat at `4`; collapsing them would have restyled anyone on defaults.
+- There are six font roles rather than one, because the pre-0.13 sites used four different system text styles. Collapsing those would have changed rendering too.
+
+Per-kind opacities (`0.85` / `0.5` / `0.6` on lane items) stay in `TimelineView` rather than moving into the appearance — they are the view's own layering, not a design token.
+
+### Tests
+
+Suite grows 324 → 335 (26 suites), all green. **The eight snapshot baselines were not re-recorded and still pass** — that is the proof that defaults reproduce pre-0.13 rendering, not merely the claim. `KadrAppearanceTests` additionally pins every default numerically, so a later tidy-up of the defaults fails loudly instead of silently restyling every consumer.
+
 ## [0.12.0] - 2026-07-02
 
 Platform floor raised to **iOS 17 / macOS 14 / tvOS 17 / visionOS 1** — the middle step of a coordinated stack-wide move (kadr v0.15 → kadr-ui v0.12 → reels-studio `@Observable` migration). No behavior change; all snapshot baselines unchanged.

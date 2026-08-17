@@ -138,6 +138,16 @@ Floor raised to **iOS 17 / macOS 14 / tvOS 17 / visionOS 1** as the middle step 
 
 No behavior change; snapshot baselines unchanged. **Correction to the original roadmap:** this entry was pencilled in as the `@Observable` migration, but KadrUI holds no `ObservableObject`s — it's pure value-type SwiftUI. The actual `@Observable` migration lives in **reels-studio** (which owns the app's stores) and rides on this floor move.
 
+## v0.13.0 — Appearance surface
+
+`KadrAppearance`, propagated through the environment, so a consuming app can style the views KadrUI draws. Additive and non-breaking: every default reproduces the pre-0.13 rendering, and the eight snapshot baselines pass unchanged as proof.
+
+- Geometry (`cornerRadius`, `laneCornerRadius`, `strokeWidth`, `elevation`), timeline colours (playhead, selection ring, track and lane grounds, waveform, keyframe marks, overlay lane), footage rendering (`.color` / `.grayscale`), six type roles.
+- `ClipColors.uniform(_:)` for mono schemes; `KeyframeMarkShape.diamond` for editors that mark authored values with a diamond.
+- Driven by [reels-studio#68](https://github.com/SteliyanH/kadr-reels-studio/pull/68), whose design migration stopped at the editor because this surface didn't exist. Closes [#101](https://github.com/SteliyanH/kadr-ui/issues/101).
+
+**Still open after this:** [#102](https://github.com/SteliyanH/kadr-ui/issues/102) — `VideoPreview` tap-to-sample, so consumers can build an eyedropper. Unrelated to appearance; it needs a coordinate → pixel mapping the package alone can do correctly, since it owns letterboxing and scale.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.

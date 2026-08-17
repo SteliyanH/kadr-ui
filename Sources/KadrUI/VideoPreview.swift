@@ -35,6 +35,9 @@ import Kadr
 /// when you want the player rebuilt.
 public struct VideoPreview: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let video: Video
     private let reloadToken: AnyHashable?
     private let onLoadFailure: ((Error) -> Void)?

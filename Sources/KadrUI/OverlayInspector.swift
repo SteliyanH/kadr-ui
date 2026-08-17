@@ -79,6 +79,9 @@ extension InspectorPanel {
 /// is wired to a clip-selection binding.
 public struct OverlayInspectorPanel: View {
 
+    /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let video: Video
     private let selectedOverlayID: Binding<LayerID?>
     private let onPosition: ((LayerID, Position) -> Void)?
@@ -241,14 +244,16 @@ extension OverlayInspectorPanel {
 // MARK: - Internal subviews (overlay-specific to keep clip-side untouched)
 
 private struct OverlaySectionHeader: View {
+    @Environment(\.kadrAppearance) private var appearance
     let title: String
     init(_ title: String) { self.title = title }
     var body: some View {
-        Text(title).font(.headline)
+        Text(title).font(appearance.panelTitleFont)
     }
 }
 
 private struct OverlaySliderRow: View {
+    @Environment(\.kadrAppearance) private var appearance
     let label: String
     let value: Double
     let range: ClosedRange<Double>
@@ -258,7 +263,7 @@ private struct OverlaySliderRow: View {
         HStack(spacing: 12) {
             Text(label)
                 .frame(width: 90, alignment: .leading)
-                .font(.subheadline)
+                .font(appearance.panelSectionFont)
                 .accessibilityHidden(true)
             Slider(
                 value: Binding(
@@ -272,13 +277,14 @@ private struct OverlaySliderRow: View {
             .accessibilityValue(String(format: "%.2f", value))
             Text(String(format: "%.2f", value))
                 .frame(width: 56, alignment: .trailing)
-                .font(.caption.monospacedDigit())
+                .font(appearance.panelValueFont)
                 .accessibilityHidden(true)
         }
     }
 }
 
 private struct OverlayTextField: View {
+    @Environment(\.kadrAppearance) private var appearance
     let text: String
     let onCommit: (String) -> Void
 

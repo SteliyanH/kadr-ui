@@ -61,6 +61,37 @@ struct EditorScreen: View {
 | **`KeyframeEditor`** *(v0.6)* | Per-property keyframe tracks. Tap-to-add at playhead, long-press to remove, drag to retime. One row per animatable property (`.transform` / `.opacity` / `.filter(index:)`) | `Kadr.Animation<T>`, `Kadr.Clip.transformAnimation`, `Kadr.Clip.opacityAnimation`, `Kadr.VideoClip.filterAnimations` |
 | **Animated `TextOverlay` preview** *(v0.6)* | When a `TextOverlay` carries a `textAnimation`, `OverlayHost` runs the `[CAAnimation]` against a live `CATextLayer` so preview matches export | `Kadr.TextAnimation` |
 
+## Appearance
+
+KadrUI draws with its own colours, radii and fonts by default. If your app has a
+design system, set `KadrAppearance` once near the editor's root and every KadrUI
+view in the subtree picks it up:
+
+```swift
+TimelineView(video, currentTime: $time)
+    .kadrAppearance(
+        KadrAppearance(
+            cornerRadius: 0,
+            laneCornerRadius: 0,
+            elevation: 0,                    // flat systems have no ambient shadow
+            playhead: .white,
+            clipColors: .uniform(.gray),     // mono: content carries the meaning, not hue
+            clipContentRendering: .grayscale,
+            keyframeMarkShape: .diamond
+        )
+    )
+```
+
+**Doing nothing changes nothing.** The environment default is
+`KadrAppearance.system`, whose every value is the rendering KadrUI shipped before
+the appearance surface existed — the package's snapshot baselines were not
+re-recorded when it landed, which is the proof rather than the promise.
+
+Covers geometry (corner radii, stroke width, elevation), timeline colours
+(playhead, selection ring, track and lane grounds, waveform, keyframe marks,
+overlay lane), footage rendering (`.color` / `.grayscale`), and six type roles.
+Each property documents its pre-0.13 value.
+
 ### Why a separate package?
 
 Kadr exposes the playback / thumbnail / introspection primitives, but intentionally **does not bake overlays into the preview surface** — `AVVideoCompositionCoreAnimationTool` is export-only and crashes on a playback `videoComposition`. KadrUI renders overlays as SwiftUI views over the player, which is also the only way SwiftUI gestures can hit-test them. The export pipeline still bakes overlays into the on-disk file.

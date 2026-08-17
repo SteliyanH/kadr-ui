@@ -47,6 +47,9 @@ public struct TimelineView: View {
     /// of animating.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// v0.13 — appearance tokens. Defaults reproduce the pre-0.13 rendering.
+    @Environment(\.kadrAppearance) private var appearance
+
     private let video: Video
     private let currentTime: Binding<CMTime>?
     private let selectedClipID: Binding<ClipID?>?
@@ -724,8 +727,8 @@ public struct TimelineView: View {
         }()
         ZStack(alignment: .topLeading) {
             // Lane background — subtle, distinguishes adjacent lanes.
-            RoundedRectangle(cornerRadius: 2)
-                .fill(.gray.opacity(0.08))
+            RoundedRectangle(cornerRadius: appearance.laneCornerRadius)
+                .fill(appearance.laneBackground)
                 .frame(width: totalWidth, height: laneHeight)
             ForEach(lane.1.indices, id: \.self) { i in
                 let item = lane.1[i]
@@ -765,7 +768,7 @@ public struct TimelineView: View {
             }
             if showLaneLabels, let label = TimelineView.laneLabel(for: lane.0) {
                 Text(label)
-                    .font(.caption2)
+                    .font(appearance.clipLabelFont)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 4)
                     .padding(.top, 2)
@@ -800,7 +803,7 @@ public struct TimelineView: View {
             single: selectedClipID?.wrappedValue,
             set: selectedClipIDs?.wrappedValue
         )
-        let block = RoundedRectangle(cornerRadius: 4)
+        let block = RoundedRectangle(cornerRadius: appearance.cornerRadius)
             .fill(laneItemColor(item.kind))
             .frame(width: w, height: laneHeight)
 
@@ -808,15 +811,15 @@ public struct TimelineView: View {
             block
             if let waveform, !waveform.peaks.isEmpty {
                 AudioWaveformShape(peaks: waveform.peaks)
-                    .fill(Color.white.opacity(0.7))
+                    .fill(appearance.selectionRing.opacity(0.7))
                     .accessibilityHidden(true)   // decorative; the audio row carries the label
                     .frame(width: w, height: laneHeight)
                     .allowsHitTesting(false)
             }
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: appearance.cornerRadius)
+                .stroke(isSelected ? appearance.selectionRing : .clear, lineWidth: appearance.strokeWidth)
         )
         .offset(x: x)
 
@@ -872,12 +875,12 @@ public struct TimelineView: View {
         )
         let canTrim = item.kind != .transition && onTrackTrim != nil
 
-        let inner = RoundedRectangle(cornerRadius: 4)
+        let inner = RoundedRectangle(cornerRadius: appearance.cornerRadius)
             .fill(laneItemColor(item.kind))
             .frame(width: max(0, liveWidth), height: laneHeight)
             .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(isSelected ? Color.white : .clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: appearance.cornerRadius)
+                    .stroke(isSelected ? appearance.selectionRing : .clear, lineWidth: appearance.strokeWidth)
             )
             .overlay(alignment: .leading) {
                 if canTrim {
@@ -890,7 +893,7 @@ public struct TimelineView: View {
                 }
             }
             .scaleEffect(isDragging ? 1.05 : 1.0)
-            .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
+            .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? appearance.elevation : 0)
             .offset(x: liveTrimOffset)
 
         // Outer slot keeps reserved width fixed (so neighbors don't reflow during
@@ -944,7 +947,7 @@ public struct TimelineView: View {
     private func trackTrimHandle(key: TrackDragKey, edge: TrimEdge, pxPerSecond: Double) -> some View {
         let isActive = trimmingTrackInfo == key && trimmingTrackEdge == edge
         Rectangle()
-            .fill(isActive ? Color.white : Color.white.opacity(0.5))
+            .fill(isActive ? appearance.selectionRing : appearance.selectionRing.opacity(0.5))
             .frame(width: 4)
             .contentShape(Rectangle().inset(by: -6))   // wider hit target than visual
             .gesture(trackTrimGesture(key: key, edge: edge, pxPerSecond: pxPerSecond))
@@ -1002,12 +1005,12 @@ public struct TimelineView: View {
             : (baseW, 0)
 
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: appearance.cornerRadius)
                 .fill(laneItemColor(item.kind))
                 .frame(width: liveWidth, height: laneHeight)
             if let waveform, !waveform.peaks.isEmpty {
                 AudioWaveformShape(peaks: waveform.peaks)
-                    .fill(Color.white.opacity(0.7))
+                    .fill(appearance.selectionRing.opacity(0.7))
                     .accessibilityHidden(true)   // decorative; the audio row carries the label
                     .frame(width: liveWidth, height: laneHeight)
                     .allowsHitTesting(false)
@@ -1026,7 +1029,7 @@ public struct TimelineView: View {
     private func audioTrimHandle(trackIndex: Int, edge: TrimEdge, pxPerSecond: Double) -> some View {
         let isActive = trimmingAudioIndex == trackIndex && trimmingAudioEdge == edge
         Rectangle()
-            .fill(isActive ? Color.white : Color.white.opacity(0.5))
+            .fill(isActive ? appearance.selectionRing : appearance.selectionRing.opacity(0.5))
             .frame(width: 4)
             .contentShape(Rectangle().inset(by: -6))   // wider hit target than visual
             .gesture(audioTrimGesture(trackIndex: trackIndex, edge: edge, pxPerSecond: pxPerSecond))
@@ -1163,13 +1166,21 @@ public struct TimelineView: View {
         return nil
     }
 
+    /// v0.13 — hues come from ``KadrAppearance``. The per-kind opacities stay
+    /// here: they are this view's own layering, not a design token, and they
+    /// were literals before.
     private func laneItemColor(_ kind: ItemKind) -> Color {
         switch kind {
-        case .video: return .blue.opacity(0.85)
-        case .image: return .green.opacity(0.85)
-        case .title: return .orange.opacity(0.85)
-        case .transition: return .gray.opacity(0.5)
-        case .audio: return .purple.opacity(0.6)
+        case .video, .image:
+            return appearance.color(for: kind).opacity(0.85)
+        case .title:
+            // The overlay lane may take a ground of its own; `nil` keeps the
+            // pre-0.13 behaviour of tinting by kind.
+            return (appearance.overlayLaneFill ?? appearance.color(for: kind)).opacity(0.85)
+        case .transition:
+            return appearance.color(for: kind).opacity(0.5)
+        case .audio:
+            return appearance.color(for: kind).opacity(0.6)
         }
     }
 
@@ -1208,7 +1219,7 @@ public struct TimelineView: View {
                 if let currentTime, pxPerSecond > 0 {
                     let x = max(0, CMTimeGetSeconds(currentTime.wrappedValue)) * pxPerSecond
                     Triangle()
-                        .fill(.red)
+                        .fill(appearance.playhead)
                         .frame(width: 8, height: 8)
                         .offset(x: x - 4, y: 0)
                         .allowsHitTesting(false)
@@ -1294,18 +1305,18 @@ public struct TimelineView: View {
             let (liveWidth, liveOffset) = liveTrimMetrics(for: index, baseWidth: baseWidth)
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: appearance.cornerRadius)
                     .fill(clipColor(for: clip).opacity(isSelected ? 0.85 : 0.6))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: appearance.cornerRadius)
                             .strokeBorder(
-                                isSelected ? Color.white : clipColor(for: clip),
+                                isSelected ? appearance.selectionRing : clipColor(for: clip),
                                 lineWidth: isSelected ? 2 : 1
                             )
                     )
                     .overlay(
                         Text(clipLabel(for: clip, seconds: seconds))
-                            .font(.caption2.monospaced())
+                            .font(appearance.timecodeFont)
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .padding(.horizontal, 4),
@@ -1320,7 +1331,7 @@ public struct TimelineView: View {
                         if onTrim != nil { trimHandle(at: index, edge: .trailing, pxPerSecond: pxPerSecond) }
                     }
                     .scaleEffect(isDragging ? 1.05 : 1.0)
-                    .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? 6 : 0)
+                    .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: isDragging ? appearance.elevation : 0)
                     .offset(x: clipReorderOffset(for: index, pxPerSecond: pxPerSecond))
                     .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: reorderAnimationKey(for: index, pxPerSecond: pxPerSecond))
                     .zIndex(isDragging || trimmingIndex == index ? 1 : 0)
@@ -1486,7 +1497,7 @@ public struct TimelineView: View {
         let isActive = trimmingIndex == index && trimmingEdge == edge
         let edgeName = edge == .leading ? "start" : "end"
         Rectangle()
-            .fill(isActive ? Color.white : Color.white.opacity(0.5))
+            .fill(isActive ? appearance.selectionRing : appearance.selectionRing.opacity(0.5))
             .frame(width: 4)
             .contentShape(Rectangle().inset(by: -6))   // wider hit target than visual
             .gesture(trimGesture(at: index, edge: edge, pxPerSecond: pxPerSecond))
@@ -1717,7 +1728,7 @@ public struct TimelineView: View {
         ZStack {
             Rectangle().fill(.gray.opacity(0.2))
             Image(systemName: "arrow.left.and.right")
-                .font(.caption2)
+                .font(appearance.clipLabelFont)
                 .foregroundStyle(.secondary)
         }
     }
@@ -1726,8 +1737,8 @@ public struct TimelineView: View {
     private func audioLane(totalSeconds: Double, pxPerSecond: Double) -> some View {
         VStack(spacing: 2) {
             ForEach(video.audioTracks.indices, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(.purple.opacity(0.5))
+                RoundedRectangle(cornerRadius: appearance.laneCornerRadius)
+                    .fill(appearance.waveform.opacity(0.5))
                     .frame(width: max(0, totalSeconds * pxPerSecond))
             }
         }
@@ -1737,7 +1748,7 @@ public struct TimelineView: View {
     private func playhead(at seconds: Double, pxPerSecond: Double, height: CGFloat) -> some View {
         let x = max(0, seconds * pxPerSecond)
         Rectangle()
-            .fill(.red)
+            .fill(appearance.playhead)
             .frame(width: 2, height: height)
             .offset(x: x)
             .allowsHitTesting(false)
@@ -1745,11 +1756,14 @@ public struct TimelineView: View {
 
     // MARK: - Clip styling
 
+    /// v0.13 — reads from ``KadrAppearance``. A mono scheme sets every field of
+    /// ``KadrAppearance/ClipColors`` to one colour via `.uniform(_:)`; the cell's
+    /// content and label then carry the meaning that hue used to.
     private func clipColor(for clip: any Clip) -> Color {
-        if clip is VideoClip { return .blue }
-        if clip is ImageClip { return .green }
-        if clip is TitleSequence { return .orange }
-        return .gray
+        if clip is VideoClip { return appearance.clipColors.video }
+        if clip is ImageClip { return appearance.clipColors.image }
+        if clip is TitleSequence { return appearance.clipColors.title }
+        return appearance.clipColors.transition
     }
 
     private func clipLabel(for clip: any Clip, seconds: Double) -> String {
