@@ -72,6 +72,8 @@ public struct TimelineView: View {
     private let onTrim: ((ClipTrimEvent) -> Void)?
     private let onTrackReorder: ((TrackReorderEvent) -> Void)?
     private let onTrackTrim: ((TrackTrimEvent) -> Void)?
+    private let onScrollOffsetChange: ((CGFloat) -> Void)?
+    private let clipAccessibilityLabel: ((Int, ClipID?) -> String)?
     /// Callback fired on drag-end of an audio-row trim handle. Set via the
     /// ``onAudioTrim(_:)`` modifier; default `nil` = audio rows render but
     /// don't host trim handles (pre-v0.10.2 behavior). Added in v0.10.2.
@@ -89,6 +91,17 @@ public struct TimelineView: View {
     /// playhead's x inside the scroll content; ``ScrollViewReader.scrollTo`` is
     /// then called with this id on every `currentTime` change to recenter it.
     private static let playheadAnchorID = "kadr-ui.playhead-anchor"
+
+    /// Coordinate space the scroll offset is measured in.
+    private static let scrollSpace = "kadr-ui.timeline-scroll"
+
+    /// Carries the content's horizontal offset out of the `ScrollView`.
+    private struct ScrollOffsetKey: PreferenceKey {
+        static let defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
+        }
+    }
 
     /// Callback fired when pinch-zoom crosses a ``ZoomSnapThreshold``. Set via
     /// the ``onZoomSnap(_:)`` modifier; default `nil` = no emission. Added in
@@ -225,7 +238,9 @@ public struct TimelineView: View {
         onReorder: ((ClipReorderEvent) -> Void)? = nil,
         onTrim: ((ClipTrimEvent) -> Void)? = nil,
         onTrackReorder: ((TrackReorderEvent) -> Void)? = nil,
-        onTrackTrim: ((TrackTrimEvent) -> Void)? = nil
+        onTrackTrim: ((TrackTrimEvent) -> Void)? = nil,
+        onScrollOffsetChange: ((CGFloat) -> Void)? = nil,
+        clipAccessibilityLabel: ((Int, ClipID?) -> String)? = nil
     ) {
         self.video = video
         self.currentTime = currentTime
@@ -241,6 +256,8 @@ public struct TimelineView: View {
         self.onTrim = onTrim
         self.onTrackReorder = onTrackReorder
         self.onTrackTrim = onTrackTrim
+        self.onScrollOffsetChange = onScrollOffsetChange
+        self.clipAccessibilityLabel = clipAccessibilityLabel
     }
 
     /// Legacy positional-arg init kept for one minor (removal target v0.11).
@@ -393,6 +410,48 @@ public struct TimelineView: View {
         TimelineZoom.clamp(pixelsPerSecond * factor)
     }
 
+    /// Spoken label for one clip in the timeline.
+    ///
+    /// Clips previously carried no label at all: the whole strip was one
+    /// unlabelled element, so a VoiceOver user could hear that a timeline
+    /// existed but nothing about what was in it. A host could not fix that from
+    /// outside either, because the clip views are not exposed.
+    ///
+    /// The default describes position, kind and duration. `clipAccessibilityLabel`
+    /// overrides it for hosts that know more than this package does — a file
+    /// name, a shot description.
+    func accessibilityLabel(forClipAt index: Int) -> String {
+        let id = index < video.clips.count ? video.clips[index].clipID : nil
+        if let clipAccessibilityLabel {
+            return clipAccessibilityLabel(index, id)
+        }
+        return TimelineView.defaultClipAccessibilityLabel(
+            index: index,
+            total: video.clips.count,
+            kind: index < video.clips.count ? TimelineView.describeKind(video.clips[index]) : "clip",
+            seconds: index < video.clips.count ? CMTimeGetSeconds(durationForClip(at: index)) : 0
+        )
+    }
+
+    /// Pure, so the wording is testable without rendering.
+    nonisolated static func defaultClipAccessibilityLabel(
+        index: Int,
+        total: Int,
+        kind: String,
+        seconds: Double
+    ) -> String {
+        let position = "\(index + 1) of \(total)"
+        let duration = String(format: "%.1f", max(0, seconds))
+        return "\(kind) \(position), \(duration) seconds"
+    }
+
+    nonisolated static func describeKind(_ clip: any Clip) -> String {
+        if clip is Kadr.Transition { return "Transition" }
+        if clip is Kadr.ImageClip { return "Image" }
+        if clip is Kadr.TitleSequence { return "Title" }
+        return "Clip"
+    }
+
     /// Wraps `stack` in a `ScrollView`, optionally inside a `ScrollViewReader`
     /// when ``fixedCenterPlayheadEnabled`` is on so we can anchor an invisible
     /// view at the playhead and re-emit `scrollTo` on every `currentTime`
@@ -406,7 +465,7 @@ public struct TimelineView: View {
         if fixedCenterPlayheadEnabled, let currentTime, totalSeconds > 0 {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    stack.overlay(alignment: .topLeading) {
+                    offsetReporting(stack).overlay(alignment: .topLeading) {
                         // Invisible anchor positioned at the playhead's x.
                         // Re-emitting scrollTo on every currentTime change
                         // re-centers it in the viewport.
@@ -432,12 +491,38 @@ public struct TimelineView: View {
                 .onAppear {
                     proxy.scrollTo(Self.playheadAnchorID, anchor: .center)
                 }
+                .coordinateSpace(name: Self.scrollSpace)
+                .onPreferenceChange(ScrollOffsetKey.self) { offset in
+                    MainActor.assumeIsolated { onScrollOffsetChange?(offset) }
+                }
             }
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                stack
+                offsetReporting(stack)
+            }
+            .coordinateSpace(name: Self.scrollSpace)
+            .onPreferenceChange(ScrollOffsetKey.self) { offset in
+                MainActor.assumeIsolated { onScrollOffsetChange?(offset) }
             }
         }
+    }
+
+    /// Measures how far the content has scrolled and publishes it as a
+    /// preference.
+    ///
+    /// Only attached because a host cannot otherwise know: a ruler drawn beside
+    /// this view reads from t=0, so with `fixedCenterPlayhead` on — where the
+    /// content moves under a stationary playhead — every tick it draws is in the
+    /// wrong place, and nothing in the API said so.
+    private func offsetReporting(_ content: some View) -> some View {
+        content.background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: ScrollOffsetKey.self,
+                    value: -geo.frame(in: .named(Self.scrollSpace)).minX
+                )
+            }
+        )
     }
 
     /// Anchor the playhead to the horizontal center of the viewport and scroll
@@ -705,6 +790,8 @@ public struct TimelineView: View {
         HStack(spacing: 0) {
             ForEach(chainIndicesArray, id: \.self) { index in
                 clipBlock(at: index, pxPerSecond: pxPerSecond)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(accessibilityLabel(forClipAt: index))
             }
         }
     }
@@ -1197,6 +1284,8 @@ public struct TimelineView: View {
             HStack(spacing: 0) {
                 ForEach(video.clips.indices, id: \.self) { index in
                     clipBlock(at: index, pxPerSecond: pxPerSecond)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(accessibilityLabel(forClipAt: index))
                 }
             }
             .frame(height: 40)
