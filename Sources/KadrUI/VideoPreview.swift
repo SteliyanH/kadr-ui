@@ -45,9 +45,27 @@ public struct VideoPreview: View {
     private let isPlaying: Binding<Bool>?
     private let currentTime: Binding<CMTime>?
     private let loops: Bool
+    private let showsPlaybackControls: Bool
 
     @State private var player: AVPlayer?
     @State private var didFailToLoad = false
+
+    /// Reference box so the periodic observer reads the *current* loop setting.
+    ///
+    /// The observer closure is created once per player and captures by value, so
+    /// a plain `loops` read inside it would freeze at whatever the flag was when
+    /// the player was built. That is the bug this box exists to remove: a caller
+    /// binding a loop toggle to `loops:` saw it do nothing until something else
+    /// happened to rebuild the player.
+    @State private var loopBox = LoopBox()
+
+    /// The last position this view pushed into `currentTime` itself.
+    ///
+    /// `onChange(of:)` cannot tell a caller's seek from the echo of our own
+    /// observer write. Comparing against this lets the echo be dropped exactly,
+    /// which is what allows the seek threshold below to be frame-scale instead
+    /// of a blunt 0.05s — see `seekEpsilon`.
+    @State private var lastPushedTime: CMTime?
 
     /// Attached only when sampling is requested. An `AVPlayerItemVideoOutput`
     /// makes the decoder hand back every frame in BGRA, which costs memory and
@@ -90,6 +108,7 @@ public struct VideoPreview: View {
         isPlaying: Binding<Bool>? = nil,
         currentTime: Binding<CMTime>? = nil,
         loops: Bool = false,
+        showsPlaybackControls: Bool = true,
         reloadToken: AnyHashable? = nil,
         onLoadFailure: ((Error) -> Void)? = nil,
         onSampleColor: ((KadrSampledColor) -> Void)? = nil
@@ -98,6 +117,7 @@ public struct VideoPreview: View {
         self.isPlaying = isPlaying
         self.currentTime = currentTime
         self.loops = loops
+        self.showsPlaybackControls = showsPlaybackControls
         self.reloadToken = reloadToken
         self.onLoadFailure = onLoadFailure
         self.onSampleColor = onSampleColor
@@ -108,6 +128,14 @@ public struct VideoPreview: View {
             Color.black
             if let player {
                 VideoPlayer(player: player)
+                    // AVKit surfaces its own transport on tap, and a host that
+                    // draws its own controls ends up with two that do not agree.
+                    // Blocking hit-testing keeps AVKit's chrome from appearing;
+                    // hiding the subtree closes the other door, because an
+                    // accessibility activation is delivered straight to the
+                    // UIKit element and never consults hit-testing at all.
+                    .allowsHitTesting(showsPlaybackControls)
+                    .accessibilityHidden(!showsPlaybackControls)
                     .overlay { if onSampleColor != nil { samplingLayer } }
             } else if didFailToLoad {
                 Image(systemName: "exclamationmark.triangle")
@@ -126,15 +154,26 @@ public struct VideoPreview: View {
             if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
             timeObserver = nil
         }
+        .onChange(of: loops) { _, nowLoops in
+            // Both halves matter: `actionAtItemEnd` governs what AVFoundation
+            // does on its own, and the box governs what the observer does when
+            // it sees the end. Updating only one leaves them disagreeing.
+            loopBox.loops = nowLoops
+            player?.actionAtItemEnd = nowLoops ? .none : .pause
+        }
         .onChange(of: isPlaying?.wrappedValue ?? false) { _, playing in
             guard let player else { return }
             playing ? player.play() : player.pause()
         }
         .onChange(of: currentTime?.wrappedValue ?? .zero) { _, time in
-            guard let player, let currentTime else { return }
-            // Only seek when the caller moved it; the observer's own writes
-            // land within a tick of the player's position.
-            guard abs(CMTimeGetSeconds(player.currentTime()) - CMTimeGetSeconds(time)) > 0.05 else { return }
+            guard let player, currentTime != nil else { return }
+            // Drop the echo of our own observer write exactly, rather than
+            // approximately. Previously this was a 0.05s threshold, which also
+            // swallowed every deliberate seek smaller than that — one frame at
+            // 30fps is 0.033s, so frame-stepping was impossible: the button
+            // moved the binding and nothing happened.
+            if let lastPushedTime, time == lastPushedTime { return }
+            guard abs(CMTimeGetSeconds(player.currentTime()) - CMTimeGetSeconds(time)) > VideoPreview.seekEpsilon else { return }
             isSeekingFromBinding = true
             player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
                 isSeekingFromBinding = false
@@ -167,6 +206,8 @@ public struct VideoPreview: View {
     /// Pushes playback position into `currentTime` ~10x a second, and clears
     /// `isPlaying` when a non-looping composition ends.
     private func attachTimeObserver(to player: AVPlayer) {
+        loopBox.loops = loops
+        player.actionAtItemEnd = loops ? .none : .pause
         guard currentTime != nil || isPlaying != nil || loops else { return }
 
         let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
@@ -176,13 +217,14 @@ public struct VideoPreview: View {
             guard !isSeekingFromBinding else { return }
 
             if let currentTime, currentTime.wrappedValue != time {
+                lastPushedTime = time
                 currentTime.wrappedValue = time
             }
 
             guard let item = player.currentItem, item.duration.isNumeric else { return }
             let atEnd = time >= item.duration
             if atEnd {
-                if loops {
+                if loopBox.loops {
                     player.seek(to: .zero)
                     player.play()
                 } else if isPlaying?.wrappedValue == true {
@@ -241,8 +283,30 @@ public struct VideoPreview: View {
 
     /// Coarse fingerprint that drives `.task(id:)`. Changes when the composition's
     /// shape changes or when the caller bumps `reloadToken`.
-    private var identity: Identity {
-        Identity(
+    private var identity: CompositionIdentity {
+        VideoPreview.compositionIdentity(of: video, reloadToken: reloadToken)
+    }
+
+    /// Smallest position change treated as a deliberate seek.
+    ///
+    /// A quarter of a frame at 120fps. Small enough that frame-stepping at any
+    /// normal frame rate goes through, large enough to absorb timescale
+    /// rounding.
+    public nonisolated static let seekEpsilon: Double = 0.002
+
+    /// The fingerprint this view uses to decide the player must be rebuilt.
+    ///
+    /// Exposed because a host driving playback needs to know a rebuild is
+    /// coming: the outgoing player's periodic observer is removed in
+    /// `onDisappear`, which does not run on a rebuild, so an in-flight
+    /// composition edit can leave two players writing to one binding. Consumers
+    /// were reconstructing this fingerprint by hand from the same four inputs,
+    /// which silently rots the moment this definition changes.
+    public nonisolated static func compositionIdentity(
+        of video: Video,
+        reloadToken: AnyHashable? = nil
+    ) -> CompositionIdentity {
+        CompositionIdentity(
             clipCount: video.clips.count,
             overlayCount: video.overlays.count,
             audioTrackCount: video.audioTracks.count,
@@ -251,16 +315,29 @@ public struct VideoPreview: View {
         )
     }
 
-    private struct Identity: Hashable {
-        let clipCount: Int
-        let overlayCount: Int
-        let audioTrackCount: Int
-        let durationSeconds: Double
-        let reloadToken: AnyHashable?
+    /// Structural fingerprint of a composition, as `VideoPreview` sees it.
+    public struct CompositionIdentity: Hashable {
+
+        public let clipCount: Int
+        public let overlayCount: Int
+        public let audioTrackCount: Int
+        public let durationSeconds: Double
+        public let reloadToken: AnyHashable?
+    }
+
+    /// Mutable cell shared with the periodic observer. See `loopBox`.
+    final class LoopBox: @unchecked Sendable {
+        var loops = false
     }
 }
 
 // MARK: - Test seams
+
+extension VideoPreview {
+    /// Lets a test assert the default without constructing a player.
+    var showsPlaybackControlsForTesting: Bool { showsPlaybackControls }
+}
+
 
 extension VideoPreview {
     /// Exposes `loops` for tests. The stored property stays private so callers
