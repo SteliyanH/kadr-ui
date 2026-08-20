@@ -61,6 +61,7 @@ public struct TimelineView: View {
     private let selectedClipIDs: Binding<Set<ClipID>>?
     private let zoom: Binding<TimelineZoom>?
     private let laneHeight: CGFloat
+    private let laneHeights: LaneHeights
     private let laneSpacing: CGFloat
     private let showAudioLanes: Bool
     private let showAudioWaveforms: Bool
@@ -72,6 +73,8 @@ public struct TimelineView: View {
     private let onTrim: ((ClipTrimEvent) -> Void)?
     private let onTrackReorder: ((TrackReorderEvent) -> Void)?
     private let onTrackTrim: ((TrackTrimEvent) -> Void)?
+    private let onScrollOffsetChange: ((CGFloat) -> Void)?
+    private let clipAccessibilityLabel: ((Int, ClipID?) -> String)?
     /// Callback fired on drag-end of an audio-row trim handle. Set via the
     /// ``onAudioTrim(_:)`` modifier; default `nil` = audio rows render but
     /// don't host trim handles (pre-v0.10.2 behavior). Added in v0.10.2.
@@ -89,6 +92,17 @@ public struct TimelineView: View {
     /// playhead's x inside the scroll content; ``ScrollViewReader.scrollTo`` is
     /// then called with this id on every `currentTime` change to recenter it.
     private static let playheadAnchorID = "kadr-ui.playhead-anchor"
+
+    /// Coordinate space the scroll offset is measured in.
+    private static let scrollSpace = "kadr-ui.timeline-scroll"
+
+    /// Carries the content's horizontal offset out of the `ScrollView`.
+    private struct ScrollOffsetKey: PreferenceKey {
+        static let defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
+        }
+    }
 
     /// Callback fired when pinch-zoom crosses a ``ZoomSnapThreshold``. Set via
     /// the ``onZoomSnap(_:)`` modifier; default `nil` = no emission. Added in
@@ -211,21 +225,99 @@ public struct TimelineView: View {
     ///     identifying which Track the clip lives in. When non-`nil`, thin grab
     ///     handles render on the leading and trailing edges of every non-transition
     ///     Track-lane block (added in v0.7.1).
+    // MARK: - Metrics
+
+    /// The fixed measurements this view lays out with.
+    ///
+    /// Public because they are not really private: a host drawing its own ruler
+    /// or reserving space for the timeline has to agree with them exactly, and
+    /// the only way to do that before now was to copy the numbers into the
+    /// consuming app and hope they never changed. They did change, silently, and
+    /// the copies did not.
+    public enum Metrics {
+        /// Height of the scrub strip above the lanes.
+        public static let scrubStripHeight: CGFloat = 14
+        /// Default height of a lane when no per-kind height is given.
+        public static let defaultLaneHeight: CGFloat = 40
+        /// Height of the audio strip in the chain-only (single-lane) layout.
+        public static let chainAudioLaneHeight: CGFloat = 12
+        /// Default vertical gap between lanes.
+        public static let defaultLaneSpacing: CGFloat = 4
+    }
+
+    /// Per-kind lane heights.
+    ///
+    /// A single `laneHeight` forced video, overlay and audio lanes to the same
+    /// size, so a design asking for a short audio strip under a tall video lane
+    /// could not be expressed — the audio lane simply rendered taller than it was
+    /// drawn.
+    public struct LaneHeights: Hashable, Sendable {
+        public var video: CGFloat
+        public var overlay: CGFloat
+        public var audio: CGFloat
+
+        public init(video: CGFloat, overlay: CGFloat, audio: CGFloat) {
+            self.video = video
+            self.overlay = overlay
+            self.audio = audio
+        }
+
+        /// Every lane the same height — the pre-existing behaviour.
+        public static func uniform(_ height: CGFloat) -> LaneHeights {
+            LaneHeights(video: height, overlay: height, audio: height)
+        }
+
+        /// Height for a given lane kind.
+        ///
+        /// Internal because `LaneKind` is: a consumer sets the three heights and
+        /// this view decides which applies where.
+        func height(for kind: LaneKind) -> CGFloat {
+            switch kind {
+            case .audio: return audio
+            case .freeFloaters: return overlay
+            case .implicitChain, .track: return video
+            }
+        }
+    }
+
+    /// Total height this view will occupy, without rendering it.
+    ///
+    /// Lets a host reserve space or place a ruler without mirroring the layout
+    /// arithmetic. Counts the scrub strip, every lane, and the gaps between.
+    public nonisolated static func contentHeight(
+        laneCount: Int,
+        laneHeights: LaneHeights = .uniform(Metrics.defaultLaneHeight),
+        laneSpacing: CGFloat = Metrics.defaultLaneSpacing,
+        includesScrubStrip: Bool = true,
+        audioLaneCount: Int = 0
+    ) -> CGFloat {
+        guard laneCount > 0 else { return includesScrubStrip ? Metrics.scrubStripHeight : 0 }
+        let videoLanes = max(0, laneCount - audioLaneCount)
+        let lanes = CGFloat(videoLanes) * laneHeights.video
+            + CGFloat(audioLaneCount) * laneHeights.audio
+        let rows = laneCount + (includesScrubStrip ? 1 : 0)
+        let gaps = CGFloat(max(0, rows - 1)) * laneSpacing
+        return lanes + (includesScrubStrip ? Metrics.scrubStripHeight : 0) + gaps
+    }
+
     public init(
         _ video: Video,
         currentTime: Binding<CMTime>? = nil,
         selectedClipID: Binding<ClipID?>? = nil,
         selectedClipIDs: Binding<Set<ClipID>>? = nil,
         zoom: Binding<TimelineZoom>? = nil,
-        laneHeight: CGFloat = 40,
-        laneSpacing: CGFloat = 4,
+        laneHeight: CGFloat = Metrics.defaultLaneHeight,
+        laneHeights: LaneHeights? = nil,
+        laneSpacing: CGFloat = Metrics.defaultLaneSpacing,
         showAudioLanes: Bool = true,
         showAudioWaveforms: Bool = false,
         showLaneLabels: Bool = false,
         onReorder: ((ClipReorderEvent) -> Void)? = nil,
         onTrim: ((ClipTrimEvent) -> Void)? = nil,
         onTrackReorder: ((TrackReorderEvent) -> Void)? = nil,
-        onTrackTrim: ((TrackTrimEvent) -> Void)? = nil
+        onTrackTrim: ((TrackTrimEvent) -> Void)? = nil,
+        onScrollOffsetChange: ((CGFloat) -> Void)? = nil,
+        clipAccessibilityLabel: ((Int, ClipID?) -> String)? = nil
     ) {
         self.video = video
         self.currentTime = currentTime
@@ -233,6 +325,7 @@ public struct TimelineView: View {
         self.selectedClipIDs = selectedClipIDs
         self.zoom = zoom
         self.laneHeight = laneHeight
+        self.laneHeights = laneHeights ?? .uniform(laneHeight)
         self.laneSpacing = laneSpacing
         self.showAudioLanes = showAudioLanes
         self.showAudioWaveforms = showAudioWaveforms
@@ -241,6 +334,8 @@ public struct TimelineView: View {
         self.onTrim = onTrim
         self.onTrackReorder = onTrackReorder
         self.onTrackTrim = onTrackTrim
+        self.onScrollOffsetChange = onScrollOffsetChange
+        self.clipAccessibilityLabel = clipAccessibilityLabel
     }
 
     /// Legacy positional-arg init kept for one minor (removal target v0.11).
@@ -259,8 +354,9 @@ public struct TimelineView: View {
         selectedClipID: Binding<ClipID?>? = nil,
         selectedClipIDs: Binding<Set<ClipID>>? = nil,
         zoom: Binding<TimelineZoom>? = nil,
-        laneHeight: CGFloat = 40,
-        laneSpacing: CGFloat = 4,
+        laneHeight: CGFloat = Metrics.defaultLaneHeight,
+        laneHeights: LaneHeights? = nil,
+        laneSpacing: CGFloat = Metrics.defaultLaneSpacing,
         showAudioLanes: Bool = true,
         showAudioWaveforms: Bool = false,
         showLaneLabels: Bool = false,
@@ -278,6 +374,7 @@ public struct TimelineView: View {
             selectedClipIDs: selectedClipIDs,
             zoom: zoom,
             laneHeight: laneHeight,
+            laneHeights: laneHeights,
             laneSpacing: laneSpacing,
             showAudioLanes: showAudioLanes,
             showAudioWaveforms: showAudioWaveforms,
@@ -393,6 +490,48 @@ public struct TimelineView: View {
         TimelineZoom.clamp(pixelsPerSecond * factor)
     }
 
+    /// Spoken label for one clip in the timeline.
+    ///
+    /// Clips previously carried no label at all: the whole strip was one
+    /// unlabelled element, so a VoiceOver user could hear that a timeline
+    /// existed but nothing about what was in it. A host could not fix that from
+    /// outside either, because the clip views are not exposed.
+    ///
+    /// The default describes position, kind and duration. `clipAccessibilityLabel`
+    /// overrides it for hosts that know more than this package does — a file
+    /// name, a shot description.
+    func accessibilityLabel(forClipAt index: Int) -> String {
+        let id = index < video.clips.count ? video.clips[index].clipID : nil
+        if let clipAccessibilityLabel {
+            return clipAccessibilityLabel(index, id)
+        }
+        return TimelineView.defaultClipAccessibilityLabel(
+            index: index,
+            total: video.clips.count,
+            kind: index < video.clips.count ? TimelineView.describeKind(video.clips[index]) : "clip",
+            seconds: index < video.clips.count ? CMTimeGetSeconds(durationForClip(at: index)) : 0
+        )
+    }
+
+    /// Pure, so the wording is testable without rendering.
+    nonisolated static func defaultClipAccessibilityLabel(
+        index: Int,
+        total: Int,
+        kind: String,
+        seconds: Double
+    ) -> String {
+        let position = "\(index + 1) of \(total)"
+        let duration = String(format: "%.1f", max(0, seconds))
+        return "\(kind) \(position), \(duration) seconds"
+    }
+
+    nonisolated static func describeKind(_ clip: any Clip) -> String {
+        if clip is Kadr.Transition { return "Transition" }
+        if clip is Kadr.ImageClip { return "Image" }
+        if clip is Kadr.TitleSequence { return "Title" }
+        return "Clip"
+    }
+
     /// Wraps `stack` in a `ScrollView`, optionally inside a `ScrollViewReader`
     /// when ``fixedCenterPlayheadEnabled`` is on so we can anchor an invisible
     /// view at the playhead and re-emit `scrollTo` on every `currentTime`
@@ -406,7 +545,7 @@ public struct TimelineView: View {
         if fixedCenterPlayheadEnabled, let currentTime, totalSeconds > 0 {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    stack.overlay(alignment: .topLeading) {
+                    offsetReporting(stack).overlay(alignment: .topLeading) {
                         // Invisible anchor positioned at the playhead's x.
                         // Re-emitting scrollTo on every currentTime change
                         // re-centers it in the viewport.
@@ -432,12 +571,38 @@ public struct TimelineView: View {
                 .onAppear {
                     proxy.scrollTo(Self.playheadAnchorID, anchor: .center)
                 }
+                .coordinateSpace(name: Self.scrollSpace)
+                .onPreferenceChange(ScrollOffsetKey.self) { offset in
+                    MainActor.assumeIsolated { onScrollOffsetChange?(offset) }
+                }
             }
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                stack
+                offsetReporting(stack)
+            }
+            .coordinateSpace(name: Self.scrollSpace)
+            .onPreferenceChange(ScrollOffsetKey.self) { offset in
+                MainActor.assumeIsolated { onScrollOffsetChange?(offset) }
             }
         }
+    }
+
+    /// Measures how far the content has scrolled and publishes it as a
+    /// preference.
+    ///
+    /// Only attached because a host cannot otherwise know: a ruler drawn beside
+    /// this view reads from t=0, so with `fixedCenterPlayhead` on — where the
+    /// content moves under a stationary playhead — every tick it draws is in the
+    /// wrong place, and nothing in the API said so.
+    private func offsetReporting(_ content: some View) -> some View {
+        content.background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: ScrollOffsetKey.self,
+                    value: -geo.frame(in: .named(Self.scrollSpace)).minX
+                )
+            }
+        )
     }
 
     /// Anchor the playhead to the horizontal center of the viewport and scroll
@@ -674,7 +839,7 @@ public struct TimelineView: View {
         VStack(alignment: .leading, spacing: laneSpacing) {
             if currentTime != nil {
                 scrubStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
-                    .frame(height: 14)
+                    .frame(height: Metrics.scrubStripHeight)
             }
             ForEach(lanes.indices, id: \.self) { i in
                 Group {
@@ -691,7 +856,7 @@ public struct TimelineView: View {
                         )
                     }
                 }
-                .frame(height: laneHeight)
+                .frame(height: laneHeights.height(for: lanes[i].0))
             }
         }
     }
@@ -705,6 +870,8 @@ public struct TimelineView: View {
         HStack(spacing: 0) {
             ForEach(chainIndicesArray, id: \.self) { index in
                 clipBlock(at: index, pxPerSecond: pxPerSecond)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(accessibilityLabel(forClipAt: index))
             }
         }
     }
@@ -1191,12 +1358,14 @@ public struct TimelineView: View {
         VStack(alignment: .leading, spacing: 4) {
             if currentTime != nil {
                 scrubStrip(pxPerSecond: pxPerSecond, totalSeconds: totalSeconds)
-                    .frame(height: 14)
+                    .frame(height: Metrics.scrubStripHeight)
             }
 
             HStack(spacing: 0) {
                 ForEach(video.clips.indices, id: \.self) { index in
                     clipBlock(at: index, pxPerSecond: pxPerSecond)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(accessibilityLabel(forClipAt: index))
                 }
             }
             .frame(height: 40)
@@ -1896,4 +2065,9 @@ private struct CrossfadeGlyph: View {
             .fill(.foreground)
         }
     }
+}
+
+extension TimelineView {
+    /// Lets a test assert the resolved lane heights without rendering.
+    var laneHeightsForTesting: LaneHeights { laneHeights }
 }

@@ -1,0 +1,17 @@
+# Opts this package in to Swift Package Index documentation hosting.
+#
+# `Sources/KadrUI/KadrUI.docc` has existed for some time, but without this
+# manifest SPI never built it — so the catalog was only ever visible to
+# someone who cloned the repository and built docs locally.
+#
+# A bare `documentation_targets` produces one documentation build on the
+# default builder pair (macOS / current Swift). KadrUI compiles on macOS,
+# so that is sufficient; if it ever stops doing so, add `platform: ios`
+# to this config rather than dropping the manifest.
+#
+# Matches kadr's own .spi.yml. Validate changes at
+# https://swiftpackageindex.com/validate-spi-manifest
+version: 1
+builder:
+  configs:
+    - documentation_targets: [KadrUI]
