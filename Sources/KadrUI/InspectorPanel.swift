@@ -52,27 +52,67 @@ public struct InspectorPanel: View {
     ///     Receives the clip's `ClipID`, the index into ``Kadr/VideoClip/filters``, and
     ///     the new scalar in the filter's natural range. Consumer rebuilds the filter via
     ///     ``Kadr/Filter/withScalar(_:)`` (or however they prefer).
+    /// One group of controls in the panel.
+    ///
+    /// The approved design puts a Transform / Opacity / Filters segmented
+    /// control above this panel, but there was nothing for it to drive: the
+    /// panel stacked all three sections and exposed no notion of a current one,
+    /// so a host could build the control and it would be inert chrome.
+    public enum Section: String, CaseIterable, Hashable, Sendable, Identifiable {
+        case transform
+        case opacity
+        case filters
+
+        public var id: String { rawValue }
+
+        /// The heading this panel already draws for the section.
+        ///
+        /// Exposed so a host's control and the panel cannot disagree about what
+        /// a section is called.
+        public var title: String {
+            switch self {
+            case .transform: return "Transform"
+            case .opacity: return "Opacity"
+            case .filters: return "Filters"
+            }
+        }
+    }
+
     public init(
         _ video: Video,
         selectedClipID: Binding<ClipID?>,
+        selectedSection: Binding<Section>? = nil,
         onTransform: ((ClipID, Transform) -> Void)? = nil,
         onOpacity: ((ClipID, Double) -> Void)? = nil,
         onFilterIntensity: ((ClipID, _ filterIndex: Int, _ intensity: Double) -> Void)? = nil
     ) {
         self.video = video
         self.selectedClipID = selectedClipID
+        self.selectedSection = selectedSection
         self.onTransform = onTransform
         self.onOpacity = onOpacity
         self.onFilterIntensity = onFilterIntensity
     }
 
+    private let selectedSection: Binding<Section>?
+
     public var body: some View {
         if let id = selectedClipID.wrappedValue, let clip = InspectorPanel.clipFor(id: id, in: video) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    transformSection(for: id, clip: clip)
-                    opacitySection(for: id, clip: clip)
-                    filtersSection(for: id, clip: clip)
+                    // No binding means the pre-existing behaviour: everything
+                    // stacked. A binding means the host owns which one shows.
+                    if let selectedSection {
+                        switch selectedSection.wrappedValue {
+                        case .transform: transformSection(for: id, clip: clip)
+                        case .opacity:   opacitySection(for: id, clip: clip)
+                        case .filters:   filtersSection(for: id, clip: clip)
+                        }
+                    } else {
+                        transformSection(for: id, clip: clip)
+                        opacitySection(for: id, clip: clip)
+                        filtersSection(for: id, clip: clip)
+                    }
                 }
                 .padding(12)
             }
