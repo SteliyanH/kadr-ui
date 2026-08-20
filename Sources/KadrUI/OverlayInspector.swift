@@ -91,6 +91,8 @@ public struct OverlayInspectorPanel: View {
     private let onText: ((LayerID, String) -> Void)?
     private let onTextAnimation: ((LayerID, OverlayTextAnimationKind) -> Void)?
     private let onRotation: ((LayerID, Double) -> Void)?
+    private let onTextStroke: ((LayerID, TextStroke?) -> Void)?
+    private let onTextShadow: ((LayerID, TextShadow?) -> Void)?
 
     public init(
         _ video: Video,
@@ -101,7 +103,9 @@ public struct OverlayInspectorPanel: View {
         onOpacity: ((LayerID, Double) -> Void)? = nil,
         onText: ((LayerID, String) -> Void)? = nil,
         onTextAnimation: ((LayerID, OverlayTextAnimationKind) -> Void)? = nil,
-        onRotation: ((LayerID, Double) -> Void)? = nil
+        onRotation: ((LayerID, Double) -> Void)? = nil,
+        onTextStroke: ((LayerID, TextStroke?) -> Void)? = nil,
+        onTextShadow: ((LayerID, TextShadow?) -> Void)? = nil
     ) {
         self.video = video
         self.selectedOverlayID = selectedOverlayID
@@ -112,6 +116,8 @@ public struct OverlayInspectorPanel: View {
         self.onText = onText
         self.onTextAnimation = onTextAnimation
         self.onRotation = onRotation
+        self.onTextStroke = onTextStroke
+        self.onTextShadow = onTextShadow
     }
 
     public var body: some View {
@@ -195,6 +201,73 @@ public struct OverlayInspectorPanel: View {
             }
         }
         .pickerStyle(.menu)
+
+        // kadr v0.12 put stroke and shadow on TextStyle so copy stays legible
+        // over busy footage. This panel never surfaced either, so a consumer
+        // wanting them had to build the whole section itself.
+        if onTextStroke != nil {
+            OverlaySectionHeader("Stroke")
+            let stroke = text.style.stroke
+            OverlaySliderRow(
+                label: "Width",
+                value: stroke?.width ?? 0,
+                range: 0...12
+            ) { width in
+                // Width 0 means "no stroke" in the renderer, so send nil rather
+                // than a zero-width stroke — otherwise a caller storing the
+                // value cannot tell "off" from "on but invisible".
+                onTextStroke?(id, width <= 0 ? nil : TextStroke(width: width, color: stroke?.color ?? .black))
+            }
+        }
+
+        if onTextShadow != nil {
+            OverlaySectionHeader("Shadow")
+            let shadow = text.style.shadow
+            OverlaySliderRow(
+                label: "Blur",
+                value: shadow?.blur ?? 0,
+                range: 0...24
+            ) { blur in
+                onTextShadow?(id, OverlayInspectorPanel.shadow(from: shadow, blur: blur))
+            }
+            OverlaySliderRow(
+                label: "Offset X",
+                value: Double(shadow?.offset.width ?? 0),
+                range: -24...24
+            ) { dx in
+                onTextShadow?(id, OverlayInspectorPanel.shadow(from: shadow, offsetX: dx))
+            }
+            OverlaySliderRow(
+                label: "Offset Y",
+                value: Double(shadow?.offset.height ?? 0),
+                range: -24...24
+            ) { dy in
+                onTextShadow?(id, OverlayInspectorPanel.shadow(from: shadow, offsetY: dy))
+            }
+        }
+    }
+
+    /// Rebuilds a shadow with one field replaced.
+    ///
+    /// Pure and `nonisolated` so the "is this still a shadow at all?" rule is
+    /// testable: a shadow with no blur and no offset is indistinguishable from
+    /// none, and reporting it as `nil` keeps a caller's stored state honest.
+    nonisolated static func shadow(
+        from existing: TextShadow?,
+        blur: Double? = nil,
+        offsetX: Double? = nil,
+        offsetY: Double? = nil
+    ) -> TextShadow? {
+        let base = existing ?? TextShadow(offset: .zero, blur: 0)
+        let newBlur = blur ?? base.blur
+        let newX = offsetX ?? Double(base.offset.width)
+        let newY = offsetY ?? Double(base.offset.height)
+        if newBlur <= 0, newX == 0, newY == 0 { return nil }
+        return TextShadow(
+            offset: CGSize(width: newX, height: newY),
+            blur: max(0, newBlur),
+            color: base.color
+        )
     }
 
     @ViewBuilder
