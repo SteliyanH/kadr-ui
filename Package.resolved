@@ -1,13 +1,13 @@
 {
-  "originHash" : "e4b9ee343415eeb115c69219db89e805d7f45d9c2928091d76bc35c5c832d3af",
+  "originHash" : "8239fa543c04890590b731ce908eb6230fc8db54498ebf29e0dfff3bda42ba38",
   "pins" : [
     {
       "identity" : "kadr",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/SteliyanH/kadr.git",
       "state" : {
-        "revision" : "5ee65a6b2c67a4b169f206656b2fa5e6a64902d9",
-        "version" : "0.15.0"
+        "revision" : "634b56f2eb8e989bb973d4de5628789c98ed4ac0",
+        "version" : "0.17.0"
       }
     },
     {
