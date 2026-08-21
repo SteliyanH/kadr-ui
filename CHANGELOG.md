@@ -4,6 +4,21 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] - 2026-08-22
+
+Adopts kadr 0.17.0.
+
+### Changed
+
+- **kadr floor raised to `0.17.0`** (from `0.15.0`). No API change here — kadr
+  0.16 and 0.17 added no public surface this package consumes. The bump exists
+  because the pin is `.upToNextMinor`, so picking up a kadr minor is a
+  deliberate act rather than something that happens on its own.
+
+  What comes with it: kadr's errors now conform to `LocalizedError`, so a
+  failure surfaced through this package reads as a sentence rather than
+  `(Kadr.KadrError error 6.)`.
+
 ## [0.15.0] - 2026-08-20
 
 Closes ten API gaps that a consuming app had been working around. Every change
