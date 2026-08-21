@@ -4,6 +4,87 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-08-20
+
+Closes ten API gaps that a consuming app had been working around. Every change
+is additive and defaults to the previous behaviour, so an existing caller
+upgrades without edits.
+
+The common thread: each of these forced a consumer to copy something out of
+this package, reimplement it, or do without. Copies drift silently, which is
+why several of them had already drifted.
+
+### Added
+
+- **`VideoPreview.compositionIdentity(of:reloadToken:)`** — the structural
+  fingerprint that decides when the player is rebuilt. A host driving playback
+  needs it, because the outgoing player's periodic observer is removed in
+  `onDisappear`, which does not run on a rebuild; editing mid-playback could
+  leave two players writing to one binding. Consumers were reconstructing this
+  from the same four inputs by hand. `nonisolated`, because it is pure.
+- **`VideoPreview(showsPlaybackControls:)`** — suppresses AVKit's own transport
+  for hosts that draw their own. Blocks hit-testing *and* hides the subtree
+  from accessibility: an accessibility activation is delivered straight to the
+  UIKit element and never consults hit-testing.
+- **`VideoPreview.seekEpsilon`** — the threshold above which a `currentTime`
+  change is treated as a deliberate seek.
+- **`TimelineView.Metrics`** — the scrub-strip height, default lane height,
+  chain audio-lane height and lane spacing this view lays out with.
+- **`TimelineView.contentHeight(laneCount:laneHeights:laneSpacing:includesScrubStrip:audioLaneCount:)`**
+  — total height without rendering, for hosts reserving space or placing a ruler.
+- **`TimelineView.LaneHeights`** and `laneHeights:` — per-kind lane heights.
+  `LaneHeights.uniform(_:)` is the previous behaviour.
+- **`TimelineView(onScrollOffsetChange:)`** — the content's horizontal scroll
+  offset. A host ruler reads from t=0, which is only correct while the content
+  sits at its origin; with `fixedCenterPlayhead` on, every tick it drew was in
+  the wrong place and nothing said so.
+- **`TimelineView(clipAccessibilityLabel:)`** — overrides the spoken label for
+  a clip.
+- **`InspectorPanel.Section`** and `selectedSection:` — the panel now has a
+  notion of a current section, so the design's Transform / Opacity / Filters
+  control has something to drive. `Section.title` carries the same headings the
+  panel draws, so a host's control cannot disagree with it.
+- **`OverlayInspectorPanel(onTextStroke:onTextShadow:)`** — surfaces the
+  `TextStroke` and `TextShadow` kadr shipped in v0.12. Controls appear only when
+  a callback is supplied.
+
+### Changed
+
+- **`loops` now takes effect while a player is alive.** The periodic observer
+  captured the flag by value and `.task(id:)`'s identity never included it, so a
+  loop toggle bound to `loops:` reviewed clean and did nothing on device until
+  something unrelated rebuilt the player. The observer now reads a reference
+  box, and `actionAtItemEnd` is kept in step with it.
+- **Seeking is frame-accurate.** The seek threshold was a blunt 0.05s that
+  existed to drop the echo of this view's own position writes — and also
+  swallowed every deliberate seek smaller than itself. One frame at 30fps is
+  0.033s, so frame-stepping did nothing. The echo is now dropped exactly, by
+  comparing against the last value this view pushed, letting the threshold fall
+  to 0.002s.
+- **Timeline clips carry accessibility labels.** Previously the strip was a
+  single unlabelled element: a VoiceOver user could hear a timeline existed and
+  nothing about its contents, and a host could not repair that from outside
+  because the clip views are not exposed. Every clip now has a default label
+  naming position, kind and duration — on by default, not opt-in. Position is
+  spoken one-based; durations clamp at zero so a transient negative during an
+  edit cannot reach speech.
+- **`TimelineView` lays out using the constants it publishes** rather than
+  literals, so `Metrics` cannot drift from what is drawn.
+- **The kadr dependency is pinned `.upToNextMinor`.** `from:` means
+  `.upToNextMajor` and SwiftPM does not special-case `0.x`, so it accepted every
+  future 0.x including breaking ones.
+
+### Documentation
+
+- Added `.spi.yml`, so the Swift Package Index builds the DocC catalog that has
+  been in this repository unbuilt.
+
+### Compatibility
+
+Requires kadr ≥ 0.15.0. iOS 17+ / macOS 14+ / visionOS 1+. Suite 354 → 363;
+snapshot baselines unchanged, which is the evidence that default rendering did
+not move.
+
 ## [0.14.0] - 2026-08-17
 
 Adds an eyedropper hook to `VideoPreview`, so a consuming app can let the user pick a colour out of the frame. Additive and opt-in: passing no callback attaches no video output and leaves playback exactly as before. Closes [#102](https://github.com/SteliyanH/kadr-ui/issues/102).
