@@ -151,3 +151,5 @@ See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones. Latest: **v0.11.0** â€
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+Contributions are accepted under the [Contributor License Agreement](CLA.md), which is signed once and covers all future contributions. It does not transfer ownership â€” you keep the copyright in your work.
