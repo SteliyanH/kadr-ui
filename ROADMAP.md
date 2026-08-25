@@ -157,12 +157,27 @@ Two additive hooks on `VideoPreview`, both driven by consumer needs that were un
 
 Both default to inert, so v0.13 call sites are unchanged. Suite 335 → 354.
 
+## v0.15.0 — Ten API gaps closed ✓ shipped
+
+Every change additive and defaulting to previous behaviour, so an existing caller upgrades without edits. The common thread: each of these forced a consumer to copy something out of this package, reimplement it, or do without — and several of those copies had already drifted.
+
+- **`VideoPreview.compositionIdentity(of:reloadToken:)`** — the structural fingerprint deciding when the player is rebuilt. Consumers were reconstructing it by hand from the same four inputs.
+- **`VideoPreview(showsPlaybackControls:)`** — suppresses AVKit's transport for hosts drawing their own. Blocks hit-testing *and* hides the subtree from accessibility, because an accessibility activation is delivered straight to the UIKit element and never consults hit-testing.
+- **`VideoPreview.seekEpsilon`**, **`TimelineView.Metrics`**, **`contentHeight(...)`**, **`LaneHeights`**, **`onScrollOffsetChange:`**, **`clipAccessibilityLabel:`**, **`InspectorPanel.Section`**, **`OverlayInspectorPanel(onTextStroke:onTextShadow:)`**.
+- **`loops` now takes effect while a player is alive.** The periodic observer captured the flag by value and `.task(id:)`'s identity never included it, so a loop toggle reviewed clean and did nothing on device.
+
+## v0.16.0 — Adopts kadr 0.17.0 ✓ shipped
+
+No API change. The pin is `.upToNextMinor`, so picking up a kadr minor is a deliberate act rather than something that happens on its own. What comes with it: kadr's errors now conform to `LocalizedError`, so a failure surfaced through this package reads as a sentence rather than `(Kadr.KadrError error 6.)`.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.
 
 - API stability commitment — no breaking changes without major version bump
-- DocC tutorials covering each component (`VideoPreview`, `ThumbnailStrip`, `OverlayHost`, `TimelineView`, `InspectorPanel`, keyframe editor)
+- DocC **articles** covering each component (`VideoPreview`, `ThumbnailStrip`, `OverlayHost`, `TimelineView`, `InspectorPanel`, keyframe editor)
+
+  > **Downgraded from tutorials, matching kadr's decision and for the same reason with more force.** `.tutorial` files carry a screenshot and a code snapshot per step, and both rot on any API or UI change. These would document *views*, so every screenshot is invalidated by any visual change — and this package has just been through a design-system migration that changed all of them. For a single maintainer that is the promise most likely to be quietly broken, and a 1.0 shipped against a broken promise is worse than one that amends it.
 - Snapshot tests for the visual components (Point-Free's `swift-snapshot-testing`)
 - Reference: `kadr-reels-studio` example app uses every kadr-ui component end-to-end
 
