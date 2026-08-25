@@ -102,10 +102,12 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 Add KadrUI to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", from: "0.8.0"),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.16.0")),
 ```
 
-Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively (≥ `0.10.0`).
+Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively — 0.16.x resolves `>=0.17.0, <0.18.0`.
+
+> **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.16.0"` would accept every future 0.x release including breaking ones. This package's own kadr dependency is pinned the same way, because kadr's minors do break: 0.15.0 raised the platform floor.
 
 ## Compatibility
 
@@ -127,6 +129,12 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 | 0.10.0 / 0.10.1 / 0.10.2 | ≥ 0.11.0 *(uses `Speed` enum + `FilterID` keyed API)* |
 | 0.11.0 | ≥ 0.11.0 *(accessibility sweep — no new Kadr surface)* |
 | 0.12.0 | ≥ 0.15.0 *(iOS 17 floor; Kadr 0.15 floor + 0.14 `Speed` enum-only)* |
+| 0.13.0 | ≥ 0.15.0 *(appearance surface — no new Kadr surface)* |
+| 0.14.0 | ≥ 0.15.0 *(preview interaction)* |
+| 0.15.0 | 0.15.x *(ten API gaps closed; pin narrowed to `.upToNextMinor`)* |
+| 0.16.0 | 0.17.x *(adopts kadr 0.17)* |
+
+Rows from 0.15.0 read as ranges rather than floors: the pin became `.upToNextMinor`, so `0.17.x` means `>=0.17.0, <0.18.0`. Earlier rows used `from:`, which is `.upToNextMajor` and accepted every later 0.x.
 
 Same platform floor as Kadr: iOS 17+ / macOS 14+ / tvOS 17+ / visionOS 1+, Swift 6.0, strict concurrency. *(Floor raised in v0.12.0 — was iOS 16 / macOS 13. Stay on `0.11.x` for the iOS 16 floor.)*
 
