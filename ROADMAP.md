@@ -157,6 +157,19 @@ Two additive hooks on `VideoPreview`, both driven by consumer needs that were un
 
 Both default to inert, so v0.13 call sites are unchanged. Suite 335 → 354.
 
+## v0.17.0 — Adopts kadr 0.19.0 ✓ shipped
+
+- **kadr floor raised to `0.19.0`.** Two cycles at once: 0.18.0 and 0.19.0 are two
+  halves of the same change.
+- **`AudioWaveform` / `AudioWaveformLoader` now come from core.** Reading an audio
+  file's peaks should not require importing a view package. `KadrUI.AudioWaveform`
+  stays valid as a typealias, so existing code is unaffected.
+- **`AudioWaveformShape` stays here** — drawing the peaks is this package's job.
+  It uses core's new `AudioWaveform.resampled(to:)`, which exists because the move
+  had left the resampling helper internal and this Shape unable to compile.
+- Four tests added for the Shape. The rendering path had been covered only by the
+  compiler.
+
 ## v1.0.0 — Production Ready
 
 Tracks Kadr v1.0.

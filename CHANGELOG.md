@@ -4,7 +4,41 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.16.0] - 2026-08-22
+## [0.17.0] - 2026-08-26
+
+Adopts kadr 0.19.0.
+
+### Changed
+
+- **kadr floor raised to `0.19.0`** (from `0.17.0`). Two cycles at once, because
+  0.18.0 and 0.19.0 are two halves of the same change.
+
+- **`AudioWaveform` and `AudioWaveformLoader` now come from kadr core.** They moved
+  there in kadr 0.18.0: reading an audio file's peaks should not require importing
+  a view package, and core already ships `ThumbnailGenerator` for the visual
+  equivalent.
+
+  **Existing code is unaffected.** `KadrUI.AudioWaveform` and
+  `KadrUI.AudioWaveformLoader` remain valid as typealiases to the core types, so
+  every existing reference compiles unchanged and values cross the boundary freely.
+
+- **`AudioWaveformShape` stays here**, and is the reason kadr 0.19.0 exists. The
+  move left `bucketPeaks` internal to core, so this Shape — which resamples peaks
+  to one bar per pixel column on every draw — could not compile against the type it
+  had just been handed. kadr 0.19.0 added `AudioWaveform.resampled(to:)`, which the
+  Shape now uses.
+
+### Tests
+
+- The waveform math tests moved to kadr alongside the code they cover.
+- **Four tests added for `AudioWaveformShape`** — empty peaks, zero-sized rects,
+  bars staying inside the rect, and fewer peaks than columns still spanning the
+  width. The rendering path had been covered only by the compiler, which is exactly
+  what let the move break it silently until a build was attempted.
+
+380 → 384 tests.
+
+## [0.16.0] - 2026-08-22## [0.16.0] - 2026-08-22
 
 Adopts kadr 0.17.0.
 
