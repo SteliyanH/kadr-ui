@@ -4,6 +4,21 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] - 2026-08-27
+
+Adopts kadr 0.20.0.
+
+### Changed
+
+- **kadr floor raised to `0.20.0`** (from `0.19.0`). No API change here — kadr
+  0.20 added export bitrate control and sample media, neither of which this
+  package consumes.
+
+  The bump exists so the family composes. With `.upToNextMinor` pins each adapter
+  accepts exactly one kadr minor, and the four had drifted onto three different
+  ones — **no single kadr version satisfied them all**, which left an app
+  depending on the family with no resolvable graph.
+
 ## [0.17.0] - 2026-08-26
 
 Adopts kadr 0.19.0.
