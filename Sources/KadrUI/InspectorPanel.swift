@@ -37,6 +37,9 @@ public struct InspectorPanel: View {
     private let onTransform: ((ClipID, Transform) -> Void)?
     private let onOpacity: ((ClipID, Double) -> Void)?
     private let onFilterIntensity: ((ClipID, _ filterIndex: Int, _ intensity: Double) -> Void)?
+    private let onFilterAdd: ((ClipID, Filter) -> Void)?
+    private let onFilterRemove: ((ClipID, _ filterIndex: Int) -> Void)?
+    private let onFilterMove: ((ClipID, _ from: IndexSet, _ to: Int) -> Void)?
 
     /// Create an inspector panel.
     /// - Parameters:
@@ -84,7 +87,10 @@ public struct InspectorPanel: View {
         selectedSection: Binding<Section>? = nil,
         onTransform: ((ClipID, Transform) -> Void)? = nil,
         onOpacity: ((ClipID, Double) -> Void)? = nil,
-        onFilterIntensity: ((ClipID, _ filterIndex: Int, _ intensity: Double) -> Void)? = nil
+        onFilterIntensity: ((ClipID, _ filterIndex: Int, _ intensity: Double) -> Void)? = nil,
+        onFilterAdd: ((ClipID, Filter) -> Void)? = nil,
+        onFilterRemove: ((ClipID, _ filterIndex: Int) -> Void)? = nil,
+        onFilterMove: ((ClipID, _ from: IndexSet, _ to: Int) -> Void)? = nil
     ) {
         self.video = video
         self.selectedClipID = selectedClipID
@@ -92,6 +98,9 @@ public struct InspectorPanel: View {
         self.onTransform = onTransform
         self.onOpacity = onOpacity
         self.onFilterIntensity = onFilterIntensity
+        self.onFilterAdd = onFilterAdd
+        self.onFilterRemove = onFilterRemove
+        self.onFilterMove = onFilterMove
     }
 
     private let selectedSection: Binding<Section>?
@@ -197,21 +206,108 @@ public struct InspectorPanel: View {
     @ViewBuilder
     private func filtersSection(for id: ClipID, clip: any Clip) -> some View {
         let filters = (clip as? VideoClip)?.filters ?? []
-        if !filters.isEmpty {
-            SectionHeader("Filters")
-            ForEach(Array(filters.enumerated()), id: \.offset) { index, filter in
-                if let scalar = InspectorPanel.scalar(of: filter),
-                   let range = InspectorPanel.range(of: filter) {
-                    SliderRow(
-                        label: InspectorPanel.label(for: filter),
-                        value: scalar,
-                        range: range
-                    ) { newValue in
-                        onFilterIntensity?(id, index, newValue)
-                    }
-                }
+        let canAuthor = onFilterAdd != nil || onFilterRemove != nil || onFilterMove != nil
+
+        if !filters.isEmpty || canAuthor {
+            HStack {
+                SectionHeader("Filters")
+                Spacer()
+                if onFilterAdd != nil { addFilterMenu(for: id) }
             }
         }
+
+        if filters.isEmpty {
+            if canAuthor {
+                Text("No filters")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("No filters applied")
+            }
+        } else {
+            // Plain rows rather than a `List`. The panel is documented as
+            // something you embed — under a TimelineView, inside your own
+            // ScrollView — and a List here would be a nested scroll view
+            // propped up with a hard-coded height. Reorder is up/down buttons
+            // for the same reason: `onMove` is a List primitive, and it is not
+            // reachable by VoiceOver or by keyboard the way buttons are.
+            ForEach(Array(filters.enumerated()), id: \.offset) { index, filter in
+                filterRow(for: id, filter: filter, index: index, count: filters.count)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func filterRow(for id: ClipID, filter: Filter, index: Int, count: Int) -> some View {
+        HStack(spacing: 8) {
+            if let scalar = InspectorPanel.scalar(of: filter),
+               let range = InspectorPanel.range(of: filter) {
+                SliderRow(
+                    label: InspectorPanel.label(for: filter),
+                    value: scalar,
+                    range: range
+                ) { newValue in
+                    onFilterIntensity?(id, index, newValue)
+                }
+            } else {
+                // .mono, .lut and .chromaKey have no scalar to vary. Before
+                // v0.19 they rendered as nothing at all, so a filter the user
+                // had applied was invisible in the panel — and unremovable,
+                // because there was no row to act on.
+                Text(InspectorPanel.label(for: filter))
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if onFilterMove != nil {
+                Button {
+                    onFilterMove?(id, IndexSet(integer: index), index - 1)
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .disabled(index == 0)
+                .accessibilityLabel("Move \(InspectorPanel.label(for: filter)) earlier")
+
+                Button {
+                    // SwiftUI's move semantics: the destination is an index in
+                    // the list *before* the element is removed, so moving down
+                    // by one is +2, not +1.
+                    onFilterMove?(id, IndexSet(integer: index), index + 2)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .disabled(index == count - 1)
+                .accessibilityLabel("Move \(InspectorPanel.label(for: filter)) later")
+            }
+
+            if onFilterRemove != nil {
+                Button(role: .destructive) {
+                    onFilterRemove?(id, index)
+                } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .accessibilityLabel("Remove \(InspectorPanel.label(for: filter))")
+            }
+        }
+        .buttonStyle(.borderless)
+    }
+
+    /// The add menu, built from ``Kadr/FilterKind`` rather than a hard-coded
+    /// list — so a filter added to kadr appears here without kadr-ui changing.
+    @ViewBuilder
+    private func addFilterMenu(for id: ClipID) -> some View {
+        Menu {
+            ForEach(FilterKind.insertable, id: \.self) { kind in
+                Button(kind.displayName) {
+                    if let filter = kind.defaultFilter { onFilterAdd?(id, filter) }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Add Filter")
     }
 }
 
@@ -306,22 +402,14 @@ extension InspectorPanel {
         }
     }
 
+    /// A display name for a filter.
+    ///
+    /// Delegates to ``Kadr/FilterKind/displayName`` rather than keeping a second
+    /// list. kadr-ui carried its own copy until v0.19, which is one more place
+    /// for a new filter to be missed — the exact drift `FilterKind` exists to
+    /// stop.
     nonisolated static func label(for filter: Filter) -> String {
-        switch filter {
-        case .brightness:   return "Brightness"
-        case .contrast:     return "Contrast"
-        case .saturation:   return "Saturation"
-        case .exposure:     return "Exposure"
-        case .sepia:        return "Sepia"
-        case .mono:         return "Mono"
-        case .lut:          return "LUT"
-        case .chromaKey:    return "Chroma Key"
-        case .gaussianBlur: return "Gaussian Blur"
-        case .vignette:     return "Vignette"
-        case .sharpen:      return "Sharpen"
-        case .zoomBlur:     return "Zoom Blur"
-        case .glow:         return "Glow"
-        }
+        filter.kind.displayName
     }
 }
 
