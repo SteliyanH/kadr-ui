@@ -4,6 +4,63 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] - 2026-08-28
+
+The authoring surface. kadr-ui could show you a composition and let you tune it;
+it could not let you build one. The engine has had filter stacks, transitions and
+chroma keying since v0.2–v0.7, and every consumer writing an editor rewrote the
+same UI to author them — roughly 800 lines of it in the reference app alone.
+
+### Added
+
+- **Filter authoring in `InspectorPanel`** — `onFilterAdd`, `onFilterRemove` and
+  `onFilterMove`. The panel could edit a filter's intensity but not add, remove
+  or reorder one, so the filter *stack* was read-only.
+
+  ```swift
+  InspectorPanel(
+      video,
+      selectedClipID: $selected,
+      onFilterIntensity: { id, i, v in ... },
+      onFilterAdd:    { id, filter in ... },
+      onFilterRemove: { id, index in ... },
+      onFilterMove:   { id, from, to in ... }
+  )
+  ```
+
+  The add menu is built from kadr 1.0's `FilterKind`, not a hard-coded list, so a
+  filter added to kadr appears here without kadr-ui changing.
+
+  All three are optional: pass none and the panel behaves exactly as in 0.18.
+
+- **`TransitionPicker`** — choose a kind, duration and slide direction, and
+  receive a fully-formed `Transition`. `TransitionKind` is the enumerable view of
+  `Kadr.Transition`, which cannot be `CaseIterable` because its cases carry
+  values.
+
+- **`ClipSplitter`** — cut a clip in two at a point in time. Pure, no SwiftUI,
+  callable from wherever your editor keeps its state. Refuses rather than
+  approximates: a clip inside a `Track`, a `Transition`, a retimed clip, and a
+  split exactly on an edge all come back as a typed `Failure` with a sentence
+  you can show someone.
+
+### Changed
+
+- **kadr floor raised to `1.0.0`**, and the pin is now `from:` rather than
+  `.upToNextMinor` — which is the whole point of kadr reaching 1.0. Adapters no
+  longer have to move in lockstep to keep the family resolvable.
+
+- **Filter labels come from `FilterKind.displayName`.** kadr-ui kept its own
+  switch over every `Filter` case; that is one more list to forget to update, and
+  the two had to agree by hand. Now there is one list, upstream.
+
+### Fixed
+
+- **Filters with no intensity are visible in the inspector.** `.mono`, `.lut` and
+  `.chromaKey` have no scalar, and the panel rendered a slider or nothing — so
+  applying `.mono` produced a filter you could neither see nor remove. They now
+  render as a labelled row.
+
 ## [0.18.0] - 2026-08-27
 
 Adopts kadr 0.20.0.
