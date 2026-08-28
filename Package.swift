@@ -13,7 +13,7 @@ let package = Package(
         .library(name: "KadrUI", targets: ["KadrUI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/SteliyanH/kadr.git", .upToNextMinor(from: "0.17.0")),
+        .package(url: "https://github.com/SteliyanH/kadr.git", .upToNextMinor(from: "0.20.0")),
         // v0.10.1 — visual-regression baselines on the editor views. Test-
         // only; main library has no third-party deps.
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.0"),
