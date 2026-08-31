@@ -200,7 +200,7 @@ Tracks Kadr v1.0.
 
 - **Cross-lane drag** (move a clip from chain → Track or between Tracks) — UX-heavy and the use cases are app-specific. Consumers wire their own Track-creation flow.
 - **Cross-lane drag** between Tracks (move a clip from one Track to another) — Track-internal reorder shipped in v0.7.0; cross-Track moves remain UX-heavy and app-specific.
-- **Custom waveform colors / shapes** — fixed white-on-block render in v0.5.3. Exposing styling waits for community demand.
+- ~~**Custom waveform colors / shapes**~~ — **shipped.** `KadrAppearance.waveform` has driven the audio lane's fill in `TimelineView` since the appearance API landed; the "waits for community demand" note outlived the thing it was waiting on. Struck through rather than deleted, because a roadmap that quietly loses its own non-goals is not a record of anything.
 - **Virtualized clip rendering at high zoom levels** — v0.7.0 ships zoom + ScrollView with full clip rendering; virtualization for very large compositions waits for community demand.
 
 ---
