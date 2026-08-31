@@ -21,42 +21,42 @@ struct TransportBandTests {
     func elapsedTruncates() {
         // 0.9s is still second zero. Rounding here would show "0:01" while the
         // playhead has not reached one second, which reads as a bug.
-        #expect(TransportBand.timecode(t(0.9)) == "0:00")
-        #expect(TransportBand.timecode(t(1.0)) == "0:01")
-        #expect(TransportBand.timecode(t(65)) == "1:05")
-        #expect(TransportBand.timecode(t(600)) == "10:00")
+        #expect(TransportControls.timecode(t(0.9)) == "0:00")
+        #expect(TransportControls.timecode(t(1.0)) == "0:01")
+        #expect(TransportControls.timecode(t(65)) == "1:05")
+        #expect(TransportControls.timecode(t(600)) == "10:00")
     }
 
     @Test("Duration rounds, because the nearest second is the honest answer")
     func durationRounds() {
-        #expect(TransportBand.durationTimecode(t(5.6)) == "0:06")
-        #expect(TransportBand.durationTimecode(t(5.4)) == "0:05")
+        #expect(TransportControls.durationTimecode(t(5.6)) == "0:06")
+        #expect(TransportControls.durationTimecode(t(5.4)) == "0:05")
     }
 
     @Test("Indefinite and negative times clamp to zero rather than printing nonsense")
     func degenerateTimesClamp() {
-        #expect(TransportBand.timecode(.indefinite) == "0:00")
-        #expect(TransportBand.timecode(t(-4)) == "0:00")
-        #expect(TransportBand.durationTimecode(.indefinite) == "0:00")
+        #expect(TransportControls.timecode(.indefinite) == "0:00")
+        #expect(TransportControls.timecode(t(-4)) == "0:00")
+        #expect(TransportControls.durationTimecode(.indefinite) == "0:00")
     }
 
     // MARK: - Skipping
 
     @Test("A skip clamps to both ends of the composition")
     func skipClamps() {
-        #expect(TransportBand.skipTarget(from: t(0.2), by: -1, duration: t(10)).seconds == 0)
-        #expect(TransportBand.skipTarget(from: t(9.5), by: 1, duration: t(10)).seconds == 10)
+        #expect(TransportControls.skipTarget(from: t(0.2), by: -1, duration: t(10)).seconds == 0)
+        #expect(TransportControls.skipTarget(from: t(9.5), by: 1, duration: t(10)).seconds == 10)
     }
 
     @Test("A skip in the middle lands exactly where asked")
     func skipIsExact() {
-        #expect(TransportBand.skipTarget(from: t(4), by: 1, duration: t(10)).seconds == 5)
-        #expect(TransportBand.skipTarget(from: t(4), by: -1, duration: t(10)).seconds == 3)
+        #expect(TransportControls.skipTarget(from: t(4), by: 1, duration: t(10)).seconds == 5)
+        #expect(TransportControls.skipTarget(from: t(4), by: -1, duration: t(10)).seconds == 3)
     }
 
     @Test("A composition with no duration has nowhere to skip to")
     func skipWithNoDuration() {
-        #expect(TransportBand.skipTarget(from: .zero, by: 1, duration: .zero).seconds == 0)
+        #expect(TransportControls.skipTarget(from: .zero, by: 1, duration: .zero).seconds == 0)
     }
 
     // MARK: - Bounds
@@ -64,24 +64,24 @@ struct TransportBandTests {
     @Test("A scrub just off zero still leaves skip-back live")
     func boundEpsilonIsTight() {
         // The point of the tight tolerance: 0.02s has real work to do.
-        #expect(!TransportBand.isAtStart(t(0.02)))
-        #expect(TransportBand.isAtStart(t(0.0005)))
-        #expect(TransportBand.isAtStart(.zero))
+        #expect(!TransportControls.isAtStart(t(0.02)))
+        #expect(TransportControls.isAtStart(t(0.0005)))
+        #expect(TransportControls.isAtStart(.zero))
     }
 
     @Test("The end bound is tight too")
     func endBoundIsTight() {
-        #expect(!TransportBand.isAtEnd(t(9.9), duration: t(10)))
-        #expect(TransportBand.isAtEnd(t(10), duration: t(10)))
+        #expect(!TransportControls.isAtEnd(t(9.9), duration: t(10)))
+        #expect(TransportControls.isAtEnd(t(10), duration: t(10)))
     }
 
     @Test("An empty composition is at both bounds, and cannot play")
     func emptyCompositionIsInert() {
-        #expect(TransportBand.isAtStart(.zero))
-        #expect(TransportBand.isAtEnd(.zero, duration: .zero))
-        #expect(!TransportBand.canPlay(duration: .zero))
-        #expect(!TransportBand.canPlay(duration: .indefinite))
-        #expect(TransportBand.canPlay(duration: t(1)))
+        #expect(TransportControls.isAtStart(.zero))
+        #expect(TransportControls.isAtEnd(.zero, duration: .zero))
+        #expect(!TransportControls.canPlay(duration: .zero))
+        #expect(!TransportControls.canPlay(duration: .indefinite))
+        #expect(TransportControls.canPlay(duration: t(1)))
     }
 
     // MARK: - The two tolerances are different on purpose
@@ -93,14 +93,14 @@ struct TransportBandTests {
 
         // A time observer ticking every 0.1s against the player item's duration
         // can publish a last position slightly short of the composition's.
-        #expect(TransportBand.reachedEndOfPlayback(nearlyEnd, duration: duration))
+        #expect(TransportControls.reachedEndOfPlayback(nearlyEnd, duration: duration))
         // But the playhead is not *on* the bound, so skip-forward stays live.
-        #expect(!TransportBand.isAtEnd(nearlyEnd, duration: duration))
+        #expect(!TransportControls.isAtEnd(nearlyEnd, duration: duration))
     }
 
     @Test("A pause in the middle is not an ending")
     func midCompositionIsNotAnEnding() {
-        #expect(!TransportBand.reachedEndOfPlayback(t(5), duration: t(10)))
+        #expect(!TransportControls.reachedEndOfPlayback(t(5), duration: t(10)))
     }
 
     // MARK: - Loop restart
@@ -109,23 +109,23 @@ struct TransportBandTests {
     func loopRestartRequiresEveryClause() {
         let end = t(10), duration = t(10)
 
-        #expect(TransportBand.shouldRestartForLoop(
+        #expect(TransportControls.shouldRestartForLoop(
             wasPlaying: true, isPlaying: false, isLooping: true, current: end, duration: duration))
 
         // A rise is the restart's own echo.
-        #expect(!TransportBand.shouldRestartForLoop(
+        #expect(!TransportControls.shouldRestartForLoop(
             wasPlaying: false, isPlaying: true, isLooping: true, current: end, duration: duration))
         // Loop off.
-        #expect(!TransportBand.shouldRestartForLoop(
+        #expect(!TransportControls.shouldRestartForLoop(
             wasPlaying: true, isPlaying: false, isLooping: false, current: end, duration: duration))
         // A fall in the middle is a pause, not an ending.
-        #expect(!TransportBand.shouldRestartForLoop(
+        #expect(!TransportControls.shouldRestartForLoop(
             wasPlaying: true, isPlaying: false, isLooping: true, current: t(4), duration: duration))
     }
 
     @Test("A stop within the observer's slack still counts as an ending")
     func loopRestartsWithinTolerance() {
-        #expect(TransportBand.shouldRestartForLoop(
+        #expect(TransportControls.shouldRestartForLoop(
             wasPlaying: true, isPlaying: false, isLooping: true,
             current: t(9.9), duration: t(10)))
     }
@@ -138,8 +138,8 @@ struct TransportBandTests {
         // and the compiler only sees a String. This is the only thing that
         // catches a name that does not exist.
         #if canImport(UIKit)
-        #expect(UIImage(systemName: TransportBand.skipBackSymbol) != nil)
-        #expect(UIImage(systemName: TransportBand.skipForwardSymbol) != nil)
+        #expect(UIImage(systemName: TransportControls.skipBackSymbol) != nil)
+        #expect(UIImage(systemName: TransportControls.skipForwardSymbol) != nil)
         #expect(UIImage(systemName: "play.fill") != nil)
         #expect(UIImage(systemName: "pause.fill") != nil)
         #expect(UIImage(systemName: "repeat") != nil)
@@ -152,20 +152,20 @@ struct TransportBandTests {
 
     @Test("Every control has a spoken label, and none is empty")
     func labelsAreSpoken() {
-        #expect(TransportBand.playPauseLabel(isPlaying: false) == "Play")
-        #expect(TransportBand.playPauseLabel(isPlaying: true) == "Pause")
-        #expect(!TransportBand.skipBackLabel.isEmpty)
-        #expect(!TransportBand.skipForwardLabel.isEmpty)
-        #expect(!TransportBand.loopLabel.isEmpty)
-        #expect(TransportBand.loopValueLabel(isLooping: true) == "On")
-        #expect(TransportBand.fullscreenLabel(isFullscreen: true) == "Exit full screen")
-        #expect(TransportBand.fullscreenLabel(isFullscreen: false) == "Full screen")
+        #expect(TransportControls.playPauseLabel(isPlaying: false) == "Play")
+        #expect(TransportControls.playPauseLabel(isPlaying: true) == "Pause")
+        #expect(!TransportControls.skipBackLabel.isEmpty)
+        #expect(!TransportControls.skipForwardLabel.isEmpty)
+        #expect(!TransportControls.loopLabel.isEmpty)
+        #expect(TransportControls.loopValueLabel(isLooping: true) == "On")
+        #expect(TransportControls.fullscreenLabel(isFullscreen: true) == "Exit full screen")
+        #expect(TransportControls.fullscreenLabel(isFullscreen: false) == "Full screen")
     }
 
     @Test("The readout is spoken as a sentence, not as punctuation")
     func readoutIsSpokenAsASentence() {
         // "1:05 / 2:00" read literally is not useful.
-        #expect(TransportBand.timeReadoutLabel(elapsed: "1:05", total: "2:00") == "1:05 of 2:00")
+        #expect(TransportControls.timeReadoutLabel(elapsed: "1:05", total: "2:00") == "1:05 of 2:00")
     }
 
     // MARK: - The view
