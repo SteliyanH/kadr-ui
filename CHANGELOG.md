@@ -4,6 +4,31 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] - 2026-08-31
+
+### Changed
+
+- **The transport decisions move from `TransportBand` to `TransportControls`.**
+
+  0.20.0 put them as statics on `TransportBand`, and documented them as callable
+  without a rendering host. They were not: `TransportBand` is a `View`, a `View`
+  is implicitly `@MainActor`, and so every one of those statics was main-actor
+  isolated — which is precisely what they were supposed not to be.
+
+  This surfaced the moment a consumer tried it. The reference app's own band
+  wanted to forward to them from `nonisolated` members and could not:
+  *"main actor-isolated default value in a nonisolated context."*
+
+  ```swift
+  TransportControls.timecode(currentTime)          // was TransportBand.timecode
+  TransportControls.shouldRestartForLoop(...)      // callable from anywhere
+  ```
+
+  **Breaking**, in a package released the same day, and taken rather than
+  papered over: a namespace of forwarding statics on the `View` would have kept
+  0.20's spelling working while leaving the isolation wrong for anyone who
+  actually needed it off the main actor.
+
 ## [0.20.0] - 2026-08-31
 
 ### Added

@@ -77,7 +77,7 @@ public struct TransportBand: View {
         isPlaying: Binding<Bool>,
         isLooping: Binding<Bool>? = nil,
         isFullscreen: Binding<Bool>? = nil,
-        skipInterval: TimeInterval = TransportBand.defaultSkipInterval
+        skipInterval: TimeInterval = TransportControls.defaultSkipInterval
     ) {
         self.duration = duration
         self.currentTime = currentTime
@@ -112,21 +112,21 @@ public struct TransportBand: View {
     private var transportGroup: some View {
         HStack(spacing: 4) {
             button(
-                systemImage: TransportBand.skipBackSymbol,
-                label: TransportBand.skipBackLabel,
-                disabled: !TransportBand.canPlay(duration: duration)
-                    || TransportBand.isAtStart(currentTime.wrappedValue)
+                systemImage: TransportControls.skipBackSymbol,
+                label: TransportControls.skipBackLabel,
+                disabled: !TransportControls.canPlay(duration: duration)
+                    || TransportControls.isAtStart(currentTime.wrappedValue)
             ) {
-                currentTime.wrappedValue = TransportBand.skipTarget(
+                currentTime.wrappedValue = TransportControls.skipTarget(
                     from: currentTime.wrappedValue, by: -skipInterval, duration: duration
                 )
             }
 
             button(
                 systemImage: isPlaying.wrappedValue ? "pause.fill" : "play.fill",
-                label: TransportBand.playPauseLabel(isPlaying: isPlaying.wrappedValue),
-                disabled: !TransportBand.canPlay(duration: duration),
-                size: TransportBand.playGlyphSize
+                label: TransportControls.playPauseLabel(isPlaying: isPlaying.wrappedValue),
+                disabled: !TransportControls.canPlay(duration: duration),
+                size: TransportControls.playGlyphSize
             ) {
                 // Record the intent *before* the state changes: a deliberate
                 // pause near the end must not read as playback ending.
@@ -135,12 +135,12 @@ public struct TransportBand: View {
             }
 
             button(
-                systemImage: TransportBand.skipForwardSymbol,
-                label: TransportBand.skipForwardLabel,
-                disabled: !TransportBand.canPlay(duration: duration)
-                    || TransportBand.isAtEnd(currentTime.wrappedValue, duration: duration)
+                systemImage: TransportControls.skipForwardSymbol,
+                label: TransportControls.skipForwardLabel,
+                disabled: !TransportControls.canPlay(duration: duration)
+                    || TransportControls.isAtEnd(currentTime.wrappedValue, duration: duration)
             ) {
-                currentTime.wrappedValue = TransportBand.skipTarget(
+                currentTime.wrappedValue = TransportControls.skipTarget(
                     from: currentTime.wrappedValue, by: skipInterval, duration: duration
                 )
             }
@@ -149,8 +149,8 @@ public struct TransportBand: View {
 
     @ViewBuilder
     private var timeReadout: some View {
-        let elapsed = TransportBand.timecode(currentTime.wrappedValue)
-        let total = TransportBand.durationTimecode(duration)
+        let elapsed = TransportControls.timecode(currentTime.wrappedValue)
+        let total = TransportControls.durationTimecode(duration)
         HStack(spacing: 2) {
             Text(elapsed).foregroundStyle(.primary)
             Text("/").foregroundStyle(.secondary)
@@ -159,7 +159,7 @@ public struct TransportBand: View {
         .font(appearance.timecodeFont)
         .monospacedDigit()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(TransportBand.timeReadoutLabel(elapsed: elapsed, total: total))
+        .accessibilityLabel(TransportControls.timeReadoutLabel(elapsed: elapsed, total: total))
     }
 
     @ViewBuilder
@@ -168,20 +168,20 @@ public struct TransportBand: View {
             if let isLooping {
                 button(
                     systemImage: "repeat",
-                    label: TransportBand.loopLabel,
+                    label: TransportControls.loopLabel,
                     disabled: false,
                     tinted: isLooping.wrappedValue
                 ) {
                     isLooping.wrappedValue.toggle()
                 }
-                .accessibilityValue(TransportBand.loopValueLabel(isLooping: isLooping.wrappedValue))
+                .accessibilityValue(TransportControls.loopValueLabel(isLooping: isLooping.wrappedValue))
             }
             if let isFullscreen {
                 button(
                     systemImage: isFullscreen.wrappedValue
                         ? "arrow.down.right.and.arrow.up.left"
                         : "arrow.up.left.and.arrow.down.right",
-                    label: TransportBand.fullscreenLabel(isFullscreen: isFullscreen.wrappedValue),
+                    label: TransportControls.fullscreenLabel(isFullscreen: isFullscreen.wrappedValue),
                     disabled: false
                 ) {
                     isFullscreen.wrappedValue.toggle()
@@ -216,7 +216,7 @@ public struct TransportBand: View {
     private func restartForLoopIfNeeded(wasPlaying: Bool, isPlaying playing: Bool) {
         defer { if !playing { suppressLoopRestart = false } }
         guard !suppressLoopRestart, let isLooping, isLooping.wrappedValue else { return }
-        guard TransportBand.shouldRestartForLoop(
+        guard TransportControls.shouldRestartForLoop(
             wasPlaying: wasPlaying,
             isPlaying: playing,
             isLooping: isLooping.wrappedValue,
@@ -228,13 +228,18 @@ public struct TransportBand: View {
     }
 }
 
-// MARK: - The decisions, as pure functions
-//
-// Every judgement the band makes lives here rather than in the body, so it can
-// be tested without a rendering host — and so a consumer building different
-// chrome can reuse the reasoning instead of re-deriving it.
+/// The decisions a transport band makes, as pure functions.
+///
+/// Separate from ``TransportBand`` because that is a `View`, and a `View` is
+/// implicitly `@MainActor` — which would make every one of these main-actor
+/// isolated and defeat the point of having them. They are here so they can be
+/// called from anywhere: a test without a rendering host, a view model, or a
+/// consumer building entirely different chrome who wants the reasoning without
+/// the pixels.
+///
+/// Added in v0.21.
 
-extension TransportBand {
+public enum TransportControls {
 
     /// Seconds per skip. A nudge, not a scrub.
     public static let defaultSkipInterval: TimeInterval = 1.0
