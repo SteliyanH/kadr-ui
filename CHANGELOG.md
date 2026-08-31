@@ -4,6 +4,58 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] - 2026-08-31
+
+### Added
+
+- **`TransportBand`** — skip back, play/pause, skip forward, a time readout, and
+  optional loop and full-screen toggles.
+
+  `VideoPreview` has taken `isPlaying` and `currentTime` as two-way bindings
+  since v0.14 and follows whatever you write to them, but it ships no controls.
+  So every consumer that wanted a play button built one — roughly 460 lines of
+  it in the reference app, and the same 460 lines in anyone else's.
+
+  ```swift
+  VStack {
+      VideoPreview(video, isPlaying: $isPlaying, currentTime: $currentTime)
+      TransportBand(duration: video.duration,
+                    currentTime: $currentTime,
+                    isPlaying: $isPlaying,
+                    isLooping: $isLooping)
+  }
+  ```
+
+  **Bindings rather than callbacks**, unlike the rest of this package. A `Video`
+  is immutable, so an edit has to be handed back for you to rebuild — but
+  transport state is genuinely two-way and already yours, and `VideoPreview`
+  takes it as bindings. Callbacks here would mean writing the same state through
+  two different shapes in one `VStack`.
+
+  Loop and full screen are optional; passing `nil` hides the control.
+
+### Notes
+
+- **Every judgement is a public static function**, so the band can be tested
+  without a rendering host and a consumer building different chrome can reuse
+  the reasoning rather than re-derive it.
+
+  The pair worth knowing about is the two tolerances. `boundEpsilon` (1 ms)
+  answers *"is the playhead on a bound"* — tight, so a scrub to 0.02 s still
+  leaves skip-back live. `endOfPlaybackTolerance` (150 ms) answers *"did
+  playback run out"* — loose, because a time observer ticking every 0.1 s
+  against the player item's duration can publish a last position slightly short
+  of the composition's. Collapsing them into one number breaks one question or
+  the other.
+
+- **The loop restart suppresses itself on a manual pause.** Pausing by hand
+  inside the end tolerance is otherwise indistinguishable from playback ending —
+  both arrive as `isPlaying` going false with the playhead at the end — and loop
+  would drag the viewer back to zero after they deliberately stopped.
+
+- Do not pass `loops: true` to `VideoPreview` *and* bind `isLooping` here. The
+  two will fight over the playhead; the band owns the restart.
+
 ## [0.19.0] - 2026-08-28
 
 The authoring surface. kadr-ui could show you a composition and let you tune it;

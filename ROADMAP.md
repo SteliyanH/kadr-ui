@@ -4,6 +4,14 @@ This document outlines the planned feature releases for KadrUI. Versions and tim
 
 For Kadr's roadmap see [kadr/ROADMAP.md](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md).
 
+## v0.20.0 — Transport controls ✓ shipped
+
+`TransportBand` — skip / play / pause / skip, a time readout, optional loop and
+full-screen. Closes the last gap named in the ecosystem audit: ~460 lines of
+playback chrome that every `VideoPreview` consumer was rebuilding.
+
+---
+
 ## v0.4.0 — Initial release ✓ shipped
 
 Drop-in SwiftUI components consuming Kadr's v0.4 introspection / preview primitives.
