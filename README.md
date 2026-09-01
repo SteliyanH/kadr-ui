@@ -1,11 +1,14 @@
 # KadrUI
 
-[![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%2017+%20|%20macOS%2014+%20|%20tvOS%2017+%20|%20visionOS%201+-blue.svg)](https://developer.apple.com)
+[![CI](https://github.com/SteliyanH/kadr-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/SteliyanH/kadr-ui/actions/workflows/ci.yml)
+[![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FSteliyanH%2Fkadr-ui%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/SteliyanH/kadr-ui)
+[![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FSteliyanH%2Fkadr-ui%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/SteliyanH/kadr-ui)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/steliyanh)
 
 **SwiftUI components for [Kadr](https://github.com/SteliyanH/kadr) — preview, scrub, and overlay-edit `Video` compositions in your own UI.**
+
+**[API documentation →](https://swiftpackageindex.com/SteliyanH/kadr-ui/documentation)**  ·  built and hosted by the Swift Package Index for every release.
 
 KadrUI consumes Kadr's introspection and preview surface (`Video.makePlayerItem`, `Video.thumbnail(at:)`, `Layout.resolveFrame`, `Video.clips`, `Track`, `AudioTrack`) to provide drop-in SwiftUI views: an `AVPlayer`-backed preview, a horizontal thumbnail strip, an overlay layer with built-in renderers and a custom hook, gesture modifiers that hit-test through `LayerID`, and a multi-lane `TimelineView` with selection / drag-to-reorder / live trim / tap-to-scrub and audio waveforms.
 
@@ -102,41 +105,25 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 Add KadrUI to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.16.0")),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.21.0")),
 ```
 
 Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively — 0.16.x resolves `>=0.17.0, <0.18.0`.
 
-> **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.16.0"` would accept every future 0.x release including breaking ones. This package's own kadr dependency is pinned the same way, because kadr's minors do break: 0.15.0 raised the platform floor.
+> **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.21.0"` would accept every future 0.x release including breaking ones. This package's own kadr dependency is pinned the same way, because kadr's minors do break: 0.15.0 raised the platform floor.
 
 ## Compatibility
 
-| KadrUI | Requires Kadr |
-|---|---|
-| 0.4.0 | ≥ 0.4.0 |
-| 0.4.1 | ≥ 0.4.1 *(uses `ClipID`)* |
-| 0.4.2 | ≥ 0.4.1 |
-| 0.4.3 | ≥ 0.4.1 |
-| 0.4.4 | ≥ 0.5.0 *(uses `Overlay.visibilityRange`)* |
-| 0.5.0 | ≥ 0.6.0 *(uses `Track`, `Clip.startTime`)* |
-| 0.5.1 | ≥ 0.6.0 |
-| 0.5.2 | ≥ 0.7.0 *(uses `Track.name`, `AudioTrack.startTime`, `AudioTrack.explicitDuration`)* |
-| 0.5.3 | ≥ 0.7.0 |
-| 0.6.0 | ≥ 0.8.0 *(uses `Transform`, `Animation<T>`, animated `TextOverlay`, `AudioTrack.crossfadeDuration`)* |
-| 0.7.0 / 0.7.1 | ≥ 0.10.0 *(uses `Track.opacityFactor`)* |
-| 0.8.0 | ≥ 0.10.0 |
-| 0.9.0 / 0.9.1 / 0.9.2 | ≥ 0.10.1 *(uses animation-clearing modifiers)* |
-| 0.10.0 / 0.10.1 / 0.10.2 | ≥ 0.11.0 *(uses `Speed` enum + `FilterID` keyed API)* |
-| 0.11.0 | ≥ 0.11.0 *(accessibility sweep — no new Kadr surface)* |
-| 0.12.0 | ≥ 0.15.0 *(iOS 17 floor; Kadr 0.15 floor + 0.14 `Speed` enum-only)* |
-| 0.13.0 | ≥ 0.15.0 *(appearance surface — no new Kadr surface)* |
-| 0.14.0 | ≥ 0.15.0 *(preview interaction)* |
-| 0.15.0 | 0.15.x *(ten API gaps closed; pin narrowed to `.upToNextMinor`)* |
-| 0.16.0 | 0.17.x *(adopts kadr 0.17)* |
+Requires **kadr 1.0 or later** and is pinned `from: "1.0.0"`, so any `1.x` works.
 
-Rows from 0.15.0 read as ranges rather than floors: the pin became `.upToNextMinor`, so `0.17.x` means `>=0.17.0, <0.18.0`. Earlier rows used `from:`, which is `.upToNextMajor` and accepted every later 0.x.
+Swift 6 · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
 
-Same platform floor as Kadr: iOS 17+ / macOS 14+ / tvOS 17+ / visionOS 1+, Swift 6.0, strict concurrency. *(Floor raised in v0.12.0 — was iOS 16 / macOS 13. Stay on `0.11.x` for the iOS 16 floor.)*
+> This section used to carry a table mapping every KadrUI version to the kadr
+> version it needed. That table was correct on the day of each release and wrong
+> by the next one, which is worse than absent — a reader deciding whether to
+> adopt would have concluded this package trailed kadr by five releases. While
+> kadr was pre-1.0 the mapping mattered, because each adapter accepted exactly
+> one kadr minor. Since kadr 1.0 it does not: `1.x` is `1.x`.
 
 ## Example app
 
@@ -146,7 +133,26 @@ The previous `Examples/SimpleViewer/` snippet has been removed in favor of the s
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for KadrUI's own milestones. Latest: **v0.16.0** — adopts kadr 0.17.0; no API change, but kadr's errors now conform to `LocalizedError`, so a failure surfaced through this package reads as a sentence. Recently shipped: **v0.15.0** closed ten API gaps a consuming app had been working around (`VideoPreview.compositionIdentity`, `showsPlaybackControls:`, `seekEpsilon`, `TimelineView.Metrics` / `contentHeight` / `LaneHeights` / `onScrollOffsetChange:` / `clipAccessibilityLabel:`, `InspectorPanel.Section`, `OverlayInspectorPanel` text stroke and shadow) and fixed `loops` taking no effect while a player is alive; **v0.14.0** preview interaction; **v0.13.0** the appearance surface. See [Kadr's ROADMAP](https://github.com/SteliyanH/kadr/blob/main/ROADMAP.md) for the upstream library — KadrUI ships on its own version track but each release is gated on the matching Kadr public surface.
+See [ROADMAP.md](ROADMAP.md) for KadrUI's milestones, and
+[Releases](https://github.com/SteliyanH/kadr-ui/releases) for what actually
+shipped — linked rather than summarised here, because a README that names a
+latest version is a README that is wrong within a week.
+
+KadrUI ships on its own version track; each release is gated on the matching
+kadr public surface.
+
+## The kadr ecosystem
+
+| Package | Purpose |
+|---|---|
+| [`kadr`](https://github.com/SteliyanH/kadr) | The engine. Declarative video composition and export. |
+| [`kadr-ui`](https://github.com/SteliyanH/kadr-ui) | SwiftUI components — preview, timeline, transport, inspector, keyframe editor. |
+| [`kadr-persistence`](https://github.com/SteliyanH/kadr-persistence) | Save a composition to a file and open it again. |
+| [`kadr-audio`](https://github.com/SteliyanH/kadr-audio) | Music library, voiceover recording, LUFS loudness. |
+| [`kadr-captions`](https://github.com/SteliyanH/kadr-captions) | SRT, VTT, iTT, ASS and SSA parsing and authoring. |
+| [`kadr-photos`](https://github.com/SteliyanH/kadr-photos) | Photos library integration. |
+
+And a reference application: [**Kadr Studio**](https://github.com/SteliyanH/kadr-reels-studio), a short-form vertical video editor built on all six.
 
 ## License
 
