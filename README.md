@@ -114,9 +114,9 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 
 ## Compatibility
 
-Requires **kadr 1.0 or later** and is pinned `from: "1.0.0"`, so any `1.x` works.
+Requires **kadr 1.2 or later** and is pinned `from: "1.2.0"`, so any later `1.x` works.
 
-Swift 6 · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
+Xcode 26 (Swift 6.2) · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
 
 > This section used to carry a table mapping every KadrUI version to the kadr
 > version it needed. That table was correct on the day of each release and wrong

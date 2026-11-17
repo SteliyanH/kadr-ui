@@ -38,10 +38,15 @@ import CoreMedia
 /// untimed composition).
 ///
 /// **Overlays without explicit `size`.** Kadr's `Overlay.size` is optional. When `nil`,
-/// `OverlayHost` renders the overlay at a default 30% × 30% of the canvas — convenient
-/// for quick-add UX where the consumer hasn't sized the overlay yet, but **not** a
-/// guaranteed match against export rendering. Set `.size(...)` explicitly on the
-/// overlay if pixel alignment in preview matters.
+/// `OverlayHost` uses the size the export uses: a text overlay hugs its text
+/// (``Kadr/TextOverlay/naturalSize(in:)``), and an image or sticker overlay takes its
+/// image's pixel size. So `.position(.bottom).anchor(.bottom)` puts the text at the
+/// bottom in preview, as it does in the exported file.
+///
+/// **Text is drawn at export scale.** `TextStyle.fontSize` is in render pixels. The
+/// default text renderer lays the text out at the composition's size, then scales it
+/// to the host, so font size, line wrapping and slide-in distances match the export
+/// at any preview size.
 public struct OverlayHost: View {
 
     /// v0.13 — appearance tokens; defaults reproduce pre-0.13 rendering.
@@ -143,8 +148,15 @@ public struct OverlayHost: View {
 
     @ViewBuilder
     private func overlayView(for overlay: any Overlay, in containerSize: CGSize) -> some View {
-        let frame = computeFrame(for: overlay, in: containerSize)
-        let resolved = customRenderer?(overlay) ?? defaultView(for: overlay)
+        let renderFrame = resolveRenderFrame(for: overlay)
+        let frame = Self.containerFrame(
+            renderFrame: renderFrame,
+            renderSize: video.preset.resolution,
+            containerSize: containerSize,
+            contentMode: contentMode
+        )
+        let custom = customRenderer?(overlay)
+        let resolved = custom ?? defaultView(for: overlay, renderSize: renderFrame.size, displaySize: frame.size)
         let isSelected = OverlayHost.overlayMatchesSelection(
             id: overlay.layerID,
             single: selectedLayerID?.wrappedValue,
@@ -152,7 +164,7 @@ public struct OverlayHost: View {
         )
         let visual = resolved
             .frame(width: frame.width, height: frame.height)
-            .opacity(overlay.opacity)
+            .opacity(Self.hostOpacity(for: overlay, customRendered: custom != nil))
             // v0.10 — selection ring matches TimelineView's clip-selection
             // visual: white stroke, 2pt, slight corner radius. Rendered
             // outside the opacity so the ring stays fully visible even
@@ -221,22 +233,54 @@ public struct OverlayHost: View {
         return false
     }
 
-    private func computeFrame(for overlay: any Overlay, in containerSize: CGSize) -> CGRect {
+    /// The overlay's frame in composition (render-pixel) coordinates.
+    private func resolveRenderFrame(for overlay: any Overlay) -> CGRect {
         let renderSize = video.preset.resolution
         guard renderSize.width > 0, renderSize.height > 0 else { return .zero }
-
-        let renderFrame = Kadr.Layout.resolveFrame(
+        return Kadr.Layout.resolveFrame(
             position: overlay.position,
-            size: overlay.size ?? .normalized(width: 0.3, height: 0.3),
+            size: overlay.size ?? Self.naturalSize(of: overlay, in: renderSize),
             anchor: overlay.anchor,
             in: renderSize
         )
-        return Self.containerFrame(
-            renderFrame: renderFrame,
-            renderSize: renderSize,
-            containerSize: containerSize,
-            contentMode: contentMode
-        )
+    }
+
+    /// The size kadr's export gives an overlay that has no explicit `size`. Mirrors
+    /// kadr's `OverlayRenderer` so preview and export agree: text hugs its text, an
+    /// image or sticker takes its image's pixel size, and anything else gets a quarter
+    /// of the canvas. Pure helper for unit tests.
+    nonisolated static func naturalSize(of overlay: any Overlay, in renderSize: CGSize) -> Kadr.Size {
+        if let text = overlay as? TextOverlay {
+            let size = text.naturalSize(in: renderSize)
+            return .pixels(width: Double(size.width), height: Double(size.height))
+        }
+        let image = (overlay as? ImageOverlay)?.image ?? (overlay as? StickerOverlay)?.image
+        if let image, let pixels = pixelSize(of: image) {
+            return .pixels(width: Double(pixels.width), height: Double(pixels.height))
+        }
+        return .normalized(width: 0.25, height: 0.25)
+    }
+
+    /// The pixel size of the `CGImage` kadr's export draws, or `nil` when there is
+    /// none (an empty image, or a `UIImage` backed only by a `CIImage`).
+    nonisolated private static func pixelSize(of image: PlatformImage) -> CGSize? {
+        #if canImport(UIKit)
+        guard let cg = image.cgImage else { return nil }
+        #else
+        var rect = CGRect(origin: .zero, size: image.size)
+        guard let cg = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
+        #endif
+        return CGSize(width: cg.width, height: cg.height)
+    }
+
+    /// The opacity `OverlayHost` applies around an overlay's view. The animated text
+    /// renderer already sets the overlay's opacity on its layer (an opacity animation
+    /// fades to it), so applying it again would square it: 0.5 would show as 0.25.
+    nonisolated static func hostOpacity(for overlay: any Overlay, customRendered: Bool) -> Double {
+        if !customRendered, let text = overlay as? TextOverlay, text.textAnimation != nil {
+            return 1
+        }
+        return overlay.opacity
     }
 
     /// Maps a frame from composition coordinates (`renderSize`) into host coordinates
@@ -285,7 +329,7 @@ public struct OverlayHost: View {
         }
     }
 
-    private func defaultView(for overlay: any Overlay) -> AnyView {
+    private func defaultView(for overlay: any Overlay, renderSize: CGSize, displaySize: CGSize) -> AnyView {
         if let img = overlay as? ImageOverlay {
             return AnyView(
                 Image(platformImage: img.image)
@@ -294,7 +338,17 @@ public struct OverlayHost: View {
             )
         }
         if let text = overlay as? TextOverlay {
-            return AnyView(textOverlayView(text))
+            guard renderSize.width > 0, renderSize.height > 0 else { return AnyView(EmptyView()) }
+            // Lay the text out in render pixels, where `fontSize` is defined and where
+            // the export lays it out, then scale the result to the host.
+            return AnyView(
+                textOverlayView(text)
+                    .frame(width: renderSize.width, height: renderSize.height)
+                    .scaleEffect(
+                        x: displaySize.width / renderSize.width,
+                        y: displaySize.height / renderSize.height
+                    )
+            )
         }
         if let sticker = overlay as? StickerOverlay {
             return AnyView(stickerOverlayView(sticker))
@@ -356,11 +410,13 @@ public struct OverlayHost: View {
         }
     }
 
+    /// Text sits at the top of its box, as the export's `CATextLayer` draws it. This
+    /// only shows when the box is taller than the text, i.e. with an explicit `size`.
     private func frameAlignment(for alignment: TextStyle.Alignment) -> Alignment {
         switch alignment {
-        case .leading:  return .leading
-        case .center:   return .center
-        case .trailing: return .trailing
+        case .leading:  return .topLeading
+        case .center:   return .top
+        case .trailing: return .topTrailing
         }
     }
 }

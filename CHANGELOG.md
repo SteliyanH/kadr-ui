@@ -4,6 +4,37 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`OverlayHost` previews overlays where and how big the export draws them.**
+  - **Text size.** `TextStyle.fontSize` is in render pixels, but the preview drew
+    it in screen points. In a phone-sized preview of a 1080p video, text came out
+    about three times too big for its box, and SwiftUI cut it down to "…". Text is
+    now laid out at the composition's size and scaled to the host, so font size,
+    line wrapping and slide-in distances match the export.
+  - **Default box.** An overlay without `.size` was previewed in a 30% × 30% box.
+    It now gets the box kadr's export gives it: text hugs its text
+    (`TextOverlay.naturalSize(in:)`, new in kadr 1.2), and an image or sticker
+    takes its image's pixel size. So `.position(.bottom).anchor(.bottom)` shows
+    the text at the bottom in preview, as kadr 1.2 exports it.
+  - **Explicit box.** Text in a box taller than the text sits at the top, as the
+    export draws it, instead of centred.
+  - **Animated text font.** Text with a `TextAnimation` was drawn in Helvetica,
+    and `.medium` as regular. It now uses the system font at the style's weight,
+    the font the export uses.
+  - **Animated text opacity.** Its opacity was applied twice, so `.opacity(0.5)`
+    previewed at 0.25.
+
+### Changed
+
+- **Requires kadr 1.2.0, and so Xcode 26 (Swift 6.2).** The default text box
+  comes from kadr's `TextOverlay.naturalSize(in:)`. kadr 1.2 declares the Swift
+  6.2 floor it already had in practice, and this manifest now says the same
+  (`swift-tools-version: 6.2`), so Xcode 16 gets SwiftPM's plain "requires
+  Swift 6.2" instead of a dependency error.
+
 ## [0.21.0] - 2026-08-31
 
 ### Changed
