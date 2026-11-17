@@ -105,12 +105,12 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 Add KadrUI to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.21.0")),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.0")),
 ```
 
 Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively — 0.16.x resolves `>=0.17.0, <0.18.0`.
 
-> **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.21.0"` would accept every future 0.x release including breaking ones. This package's own kadr dependency is pinned the same way, because kadr's minors do break: 0.15.0 raised the platform floor.
+> **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.22.0"` would accept every future 0.x release including breaking ones. (This package's own kadr dependency uses `from:`, because kadr is past 1.0 and its minors no longer break.)
 
 ## Compatibility
 
