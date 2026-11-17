@@ -105,18 +105,18 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 Add KadrUI to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.21.0")),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.0")),
 ```
 
 Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively — 0.16.x resolves `>=0.17.0, <0.18.0`.
 
-> **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.21.0"` would accept every future 0.x release including breaking ones. This package's own kadr dependency is pinned the same way, because kadr's minors do break: 0.15.0 raised the platform floor.
+> **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.22.0"` would accept every future 0.x release including breaking ones. (This package's own kadr dependency uses `from:`, because kadr is past 1.0 and its minors no longer break.)
 
 ## Compatibility
 
-Requires **kadr 1.0 or later** and is pinned `from: "1.0.0"`, so any `1.x` works.
+Requires **kadr 1.2 or later** and is pinned `from: "1.2.0"`, so any later `1.x` works.
 
-Swift 6 · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
+Xcode 26 (Swift 6.2) · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
 
 > This section used to carry a table mapping every KadrUI version to the kadr
 > version it needed. That table was correct on the day of each release and wrong

@@ -58,20 +58,28 @@ struct AnimatedTextLayerView: View {
         layer.opacity = Float(overlay.opacity)
     }
 
-    nonisolated private static func ctFont(for style: TextStyle) -> CTFont {
+    /// The font kadr's export draws `style` with (kadr's `TextMetrics.font`): the
+    /// named font, or the system font at the style's weight. A descriptor with only
+    /// a trait, which this used before, matched no family and gave Helvetica Regular
+    /// for every weight.
+    nonisolated static func ctFont(for style: TextStyle) -> CTFont {
         let size = CGFloat(style.fontSize)
         if let name = style.fontName {
             return CTFontCreateWithName(name as CFString, size, nil)
         }
-        let traits: CTFontSymbolicTraits
-        switch style.weight {
-        case .regular: traits = []
-        case .medium:  traits = []
-        case .bold:    traits = .boldTrait
+        guard let system = CTFontCreateUIFontForLanguage(.system, size, nil) else {
+            return CTFontCreateWithName("Helvetica" as CFString, size, nil)
         }
-        let descriptor = CTFontDescriptorCreateWithAttributes([:] as CFDictionary)
-        let withTraits = CTFontDescriptorCreateCopyWithSymbolicTraits(descriptor, traits, traits) ?? descriptor
-        return CTFontCreateWithFontDescriptor(withTraits, size, nil)
+        let weight: CGFloat
+        switch style.weight {
+        case .regular: weight = 0.0    // kCTFontWeightRegular
+        case .medium:  weight = 0.23   // kCTFontWeightMedium
+        case .bold:    weight = 0.4    // kCTFontWeightBold
+        }
+        let descriptor = CTFontDescriptorCreateCopyWithAttributes(CTFontCopyFontDescriptor(system), [
+            kCTFontTraitsAttribute: [kCTFontWeightTrait: weight],
+        ] as CFDictionary)
+        return CTFontCreateWithFontDescriptor(descriptor, size, nil)
     }
 
     nonisolated private static func alignmentMode(for alignment: TextStyle.Alignment) -> CATextLayerAlignmentMode {
