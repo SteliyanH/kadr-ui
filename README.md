@@ -38,8 +38,8 @@ struct EditorScreen: View {
                 video,
                 selectedClipID: $selectedClipID,
                 showAudioWaveforms: true,
-                onReorder: { _, _, newClips in /* rebuild Video with newClips */ },
-                onTrim: { idx, leading, trailing in /* rebuild clip with trims */ }
+                onReorder: { event in /* rebuild Video with event.newClips */ },
+                onTrim: { event in /* rebuild clip event.clipIndex with the new trims */ }
             )
             .frame(height: 80)
 
@@ -72,18 +72,25 @@ design system, set `KadrAppearance` once near the editor's root and every KadrUI
 view in the subtree picks it up:
 
 ```swift
-TimelineView(video, currentTime: $time)
-    .kadrAppearance(
-        KadrAppearance(
-            cornerRadius: 0,
-            laneCornerRadius: 0,
-            elevation: 0,                    // flat systems have no ambient shadow
-            playhead: .white,
-            clipColors: .uniform(.gray),     // mono: content carries the meaning, not hue
-            clipContentRendering: .grayscale,
-            keyframeMarkShape: .diamond
-        )
-    )
+struct MonoEditor: View {
+    let video: Video
+    @State private var time: CMTime = .zero
+
+    var body: some View {
+        TimelineView(video, currentTime: $time)
+            .kadrAppearance(
+                KadrAppearance(
+                    cornerRadius: 0,
+                    laneCornerRadius: 0,
+                    elevation: 0,                    // flat systems have no ambient shadow
+                    playhead: .white,
+                    keyframeMarkShape: .diamond,
+                    clipColors: .uniform(.gray),     // mono: content carries the meaning, not hue
+                    clipContentRendering: .grayscale
+                )
+            )
+    }
+}
 ```
 
 **Doing nothing changes nothing.** The environment default is
@@ -104,11 +111,12 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 
 Add KadrUI to your `Package.swift`:
 
+<!-- readme-snippets: skip -->
 ```swift
 .package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.0")),
 ```
 
-Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively — 0.16.x resolves `>=0.17.0, <0.18.0`.
+Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively; [Compatibility](#compatibility) says which versions.
 
 > **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.22.0"` would accept every future 0.x release including breaking ones. (This package's own kadr dependency uses `from:`, because kadr is past 1.0 and its minors no longer break.)
 
@@ -128,8 +136,6 @@ Xcode 26 (Swift 6.2) · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
 ## Example app
 
 For a complete reference implementation that wires every KadrUI component into a real iOS editor — preview, multi-lane timeline, inspector panel, keyframe editor, animated text overlays, audio crossfade glyphs — see [`kadr-reels-studio`](https://github.com/SteliyanH/kadr-reels-studio). It's a runnable iOS app (`brew install xcodegen && make project && open ReelsStudio.xcodeproj`) using KadrUI alongside the rest of the kadr ecosystem (kadr core, [kadr-captions](https://github.com/SteliyanH/kadr-captions), [kadr-photos](https://github.com/SteliyanH/kadr-photos)).
-
-The previous `Examples/SimpleViewer/` snippet has been removed in favor of the standalone reels-studio repo.
 
 ## Roadmap
 
