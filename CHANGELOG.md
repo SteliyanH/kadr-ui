@@ -4,6 +4,17 @@ All notable changes to KadrUI will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **tvOS is no longer listed as supported.** KadrUI has never built for tvOS:
+  the timeline, trimming, the keyframe and speed editors, overlay handles and
+  the preview are built on drag and tap-location gestures, and tvOS has
+  neither, nor `Slider`. The manifest no longer declares tvOS and the README
+  no longer claims it. Nothing that worked stops working. kadr itself still
+  supports tvOS.
+
 ## [0.22.0] - 2026-11-17
 
 ### Fixed
