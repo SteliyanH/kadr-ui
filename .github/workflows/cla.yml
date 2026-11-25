@@ -4,11 +4,13 @@ name: CLA
 # pull request and never see it — which is the situation the CLA exists to
 # prevent.
 #
-# This is CLA Assistant *Lite*: the action runs inside this repository and
-# stores signatures here, so there is no third-party service holding the record
-# and no OAuth app to authorise. Signatures live on the `cla-signatures`
-# branch, not on `main`, because `main` is protected and a bot cannot push to
-# it.
+# This is CLA Assistant *Lite*: the action runs inside this repository, so
+# there is no third-party service holding the record and no OAuth app to
+# authorise. Signatures for every kadr repository are kept in one place, the
+# `cla-signatures` branch of SteliyanH/kadr, so a contributor signs once for
+# the whole project. Writing there from this repository needs a token with
+# contents access to SteliyanH/kadr, stored here as the
+# `CLA_SIGNATURES_TOKEN` secret; GITHUB_TOKEN can only write to this repository.
 #
 # `pull_request_target` rather than `pull_request`: the check needs write
 # access to comment and set a status, and `pull_request` runs without it for
@@ -24,7 +26,7 @@ on:
 
 permissions:
   actions: write
-  contents: write
+  contents: read   # signatures are written to SteliyanH/kadr with CLA_SIGNATURES_TOKEN
   pull-requests: write
   statuses: write
 
@@ -40,10 +42,13 @@ jobs:
         uses: contributor-assistant/github-action@v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_SIGNATURES_TOKEN }}
         with:
-          path-to-document: https://github.com/SteliyanH/kadr-ui/blob/main/CLA.md
+          path-to-document: https://github.com/SteliyanH/kadr/blob/main/CLA.md
           path-to-signatures: signatures/version1/cla.json
           branch: cla-signatures
+          remote-organization-name: SteliyanH
+          remote-repository-name: kadr
           # The owner does not sign their own agreement; bots cannot.
           allowlist: SteliyanH,dependabot[bot],github-actions[bot]
           custom-pr-sign-comment: >-
@@ -51,7 +56,7 @@ jobs:
             terms for all my present and future contributions to this project.
           custom-notsigned-prcomment: >-
             Thanks for the pull request. Before it can be merged, please read the
-            [Contributor License Agreement](https://github.com/SteliyanH/kadr-ui/blob/main/CLA.md)
+            [Contributor License Agreement](https://github.com/SteliyanH/kadr/blob/main/CLA.md)
             and post the sentence below as a comment on this pull request.
 
             You sign once and it covers every repository in the project and all
