@@ -42,7 +42,7 @@ func readmeSnippet1() async throws {
     }
 }
 
-// README.md:74
+// README.md:81
 @MainActor
 func readmeSnippet2() async throws {
     struct MonoEditor: View {
