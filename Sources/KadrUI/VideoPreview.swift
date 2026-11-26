@@ -176,7 +176,9 @@ public struct VideoPreview: View {
             guard abs(CMTimeGetSeconds(player.currentTime()) - CMTimeGetSeconds(time)) > VideoPreview.seekEpsilon else { return }
             isSeekingFromBinding = true
             player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-                isSeekingFromBinding = false
+                // AVPlayer does not say which queue runs this, and the flag is
+                // view state: hop to the main actor rather than assume it.
+                Task { @MainActor in isSeekingFromBinding = false }
             }
         }
         .task(id: identity) {
@@ -212,25 +214,30 @@ public struct VideoPreview: View {
 
         let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-            // Skip the tick that our own seek produced, or the binding would
-            // fight the observer.
-            guard !isSeekingFromBinding else { return }
+            // `queue: .main` is the guarantee; this tells the compiler. The
+            // closure type is `@Sendable` because AVFoundation cannot know
+            // which queue a caller passes.
+            MainActor.assumeIsolated {
+                // Skip the tick that our own seek produced, or the binding would
+                // fight the observer.
+                guard !isSeekingFromBinding else { return }
 
-            if let currentTime, currentTime.wrappedValue != time {
-                lastPushedTime = time
-                currentTime.wrappedValue = time
-            }
+                if let currentTime, currentTime.wrappedValue != time {
+                    lastPushedTime = time
+                    currentTime.wrappedValue = time
+                }
 
-            guard let item = player.currentItem, item.duration.isNumeric else { return }
-            let atEnd = time >= item.duration
-            if atEnd {
-                if loopBox.loops {
-                    player.seek(to: .zero)
-                    player.play()
-                } else if isPlaying?.wrappedValue == true {
-                    // The player pauses itself at the end; reflect that, so a
-                    // caller's play button does not sit stuck on "pause".
-                    isPlaying?.wrappedValue = false
+                guard let item = player.currentItem, item.duration.isNumeric else { return }
+                let atEnd = time >= item.duration
+                if atEnd {
+                    if loopBox.loops {
+                        player.seek(to: .zero)
+                        player.play()
+                    } else if isPlaying?.wrappedValue == true {
+                        // The player pauses itself at the end; reflect that, so a
+                        // caller's play button does not sit stuck on "pause".
+                        isPlaying?.wrappedValue = false
+                    }
                 }
             }
         }
