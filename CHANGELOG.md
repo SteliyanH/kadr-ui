@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-11-27
+
 ### Changed
 
 - **tvOS is no longer listed as supported.** KadrUI has never built for tvOS:
