@@ -120,7 +120,7 @@ Add KadrUI to your `Package.swift`:
 
 <!-- readme-snippets: skip -->
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.0")),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.1")),
 ```
 
 Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively; [Compatibility](#compatibility) says which versions.
