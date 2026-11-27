@@ -6,7 +6,6 @@ let package = Package(
     platforms: [
         .iOS(.v17),
         .macOS(.v14),
-        .tvOS(.v17),
         .visionOS(.v1)
     ],
     products: [
@@ -32,6 +31,20 @@ let package = Package(
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
                 .swiftLanguageMode(.v6)
+            ]
+        ),
+        // Every ```swift block in README.md, copied here by
+        // Tools/readme-snippets.sh so the README cannot show code that does
+        // not compile. Not a product: nothing depends on it, it only builds.
+        // Warnings are errors here, so a snippet that calls a deprecated
+        // initialiser fails the build instead of teaching the old API.
+        .target(
+            name: "KadrUIExamples",
+            dependencies: ["KadrUI"],
+            path: "Examples",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .treatAllWarnings(as: .error)
             ]
         ),
         .testTarget(

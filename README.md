@@ -38,8 +38,8 @@ struct EditorScreen: View {
                 video,
                 selectedClipID: $selectedClipID,
                 showAudioWaveforms: true,
-                onReorder: { _, _, newClips in /* rebuild Video with newClips */ },
-                onTrim: { idx, leading, trailing in /* rebuild clip with trims */ }
+                onReorder: { event in /* rebuild Video with event.newClips */ },
+                onTrim: { event in /* rebuild clip event.clipIndex with the new trims */ }
             )
             .frame(height: 80)
 
@@ -64,6 +64,13 @@ struct EditorScreen: View {
 | **`InspectorPanel`** *(v0.6)* | Per-clip property panel: Transform sliders (position / rotation / scale / anchor), opacity, animatable filter intensities. Edits surface through callbacks like `TimelineView.onTrim` | `Kadr.Transform`, `Kadr.Filter`, `Kadr.Clip.opacity` |
 | **`KeyframeEditor`** *(v0.6)* | Per-property keyframe tracks. Tap-to-add at playhead, long-press to remove, drag to retime. One row per animatable property (`.transform` / `.opacity` / `.filter(index:)`) | `Kadr.Animation<T>`, `Kadr.Clip.transformAnimation`, `Kadr.Clip.opacityAnimation`, `Kadr.VideoClip.filterAnimations` |
 | **Animated `TextOverlay` preview** *(v0.6)* | When a `TextOverlay` carries a `textAnimation`, `OverlayHost` runs the `[CAAnimation]` against a live `CATextLayer` so preview matches export | `Kadr.TextAnimation` |
+| **`OverlayInspectorPanel`** *(v0.8)* | Property panel for a selected overlay: position, anchor and opacity, plus text and text animation for `TextOverlay` and rotation for `StickerOverlay` | `Kadr.Overlay`, `Kadr.TextOverlay`, `Kadr.StickerOverlay` |
+| **`OverlayKeyframeEditor`** *(v0.8)* | `KeyframeEditor`'s gestures for an overlay's position and size animations, on composition time rather than clip time | `Kadr.Animation<Position>`, `Kadr.Animation<Size>` |
+| **`CaptionEditor`** *(v0.8)* | List editor for caption cues: edit text and start/end times, snap either to the playhead, add a cue at the playhead, delete. Cues outside the composition are flagged, not dropped | `Kadr.Caption`, `Kadr.Video.captions(_:)` |
+| **`SpeedCurveEditor`** *(v0.8)* | Speed keyframes for a `VideoClip` on a log-scaled axis, clamped to `0.25…4×`: tap to add, drag to move, long-press to remove. Reports the new curve, or `nil` to clear it | `Kadr.Speed.curved(_:)`, `Kadr.Animation<Double>` |
+| **`TransitionPicker`** *(v0.19)* | Choose a transition's kind, duration and direction, and get a `Transition` back. Pass `durationRange` to clamp the duration to what the neighbouring clips allow | `Kadr.Transition` |
+| **`ClipSplitter`** *(v0.19)* | Cut a clip in two at a time. Pure functions, no SwiftUI; returns the new clips, or the reason it can't | `Kadr.Clip`, `Kadr.ClipID` |
+| **`TransportBand`** *(v0.20)*, **`TransportControls`** *(v0.21)* | Playback controls for `VideoPreview`: skip back, play/pause, skip forward, time readout, optional loop and full-screen toggles. Writes the same `currentTime` / `isPlaying` bindings `VideoPreview` reads. `TransportControls` holds its decisions as pure functions for custom chrome | `Kadr.Video.duration` |
 
 ## Appearance
 
@@ -72,18 +79,25 @@ design system, set `KadrAppearance` once near the editor's root and every KadrUI
 view in the subtree picks it up:
 
 ```swift
-TimelineView(video, currentTime: $time)
-    .kadrAppearance(
-        KadrAppearance(
-            cornerRadius: 0,
-            laneCornerRadius: 0,
-            elevation: 0,                    // flat systems have no ambient shadow
-            playhead: .white,
-            clipColors: .uniform(.gray),     // mono: content carries the meaning, not hue
-            clipContentRendering: .grayscale,
-            keyframeMarkShape: .diamond
-        )
-    )
+struct MonoEditor: View {
+    let video: Video
+    @State private var time: CMTime = .zero
+
+    var body: some View {
+        TimelineView(video, currentTime: $time)
+            .kadrAppearance(
+                KadrAppearance(
+                    cornerRadius: 0,
+                    laneCornerRadius: 0,
+                    elevation: 0,                    // flat systems have no ambient shadow
+                    playhead: .white,
+                    keyframeMarkShape: .diamond,
+                    clipColors: .uniform(.gray),     // mono: content carries the meaning, not hue
+                    clipContentRendering: .grayscale
+                )
+            )
+    }
+}
 ```
 
 **Doing nothing changes nothing.** The environment default is
@@ -104,11 +118,12 @@ Kadr exposes the playback / thumbnail / introspection primitives, but intentiona
 
 Add KadrUI to your `Package.swift`:
 
+<!-- readme-snippets: skip -->
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.0")),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.1")),
 ```
 
-Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively — 0.16.x resolves `>=0.17.0, <0.18.0`.
+Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively; [Compatibility](#compatibility) says which versions.
 
 > **Use `.upToNextMinor`, not `from:`.** `from:` means `.upToNextMajor`, and SwiftPM does not special-case `0.x` — so `from: "0.22.0"` would accept every future 0.x release including breaking ones. (This package's own kadr dependency uses `from:`, because kadr is past 1.0 and its minors no longer break.)
 
@@ -116,7 +131,9 @@ Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively 
 
 Requires **kadr 1.2 or later** and is pinned `from: "1.2.0"`, so any later `1.x` works.
 
-Xcode 26 (Swift 6.2) · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
+Xcode 26 (Swift 6.2) · iOS 17 · macOS 14 · visionOS 1
+
+Not tvOS. The timeline and editors are built on drag gestures, which tvOS does not have.
 
 > This section used to carry a table mapping every KadrUI version to the kadr
 > version it needed. That table was correct on the day of each release and wrong
@@ -128,8 +145,6 @@ Xcode 26 (Swift 6.2) · iOS 17 · macOS 14 · tvOS 17 · visionOS 1
 ## Example app
 
 For a complete reference implementation that wires every KadrUI component into a real iOS editor — preview, multi-lane timeline, inspector panel, keyframe editor, animated text overlays, audio crossfade glyphs — see [`kadr-reels-studio`](https://github.com/SteliyanH/kadr-reels-studio). It's a runnable iOS app (`brew install xcodegen && make project && open ReelsStudio.xcodeproj`) using KadrUI alongside the rest of the kadr ecosystem (kadr core, [kadr-captions](https://github.com/SteliyanH/kadr-captions), [kadr-photos](https://github.com/SteliyanH/kadr-photos)).
-
-The previous `Examples/SimpleViewer/` snippet has been removed in favor of the standalone reels-studio repo.
 
 ## Roadmap
 

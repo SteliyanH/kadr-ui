@@ -43,6 +43,18 @@ jobs:
           # changed and not that the runner image moved. 26.3 is what the last
           # green runs used.
           xcode-version: '26.3'
+
+      # README examples had drifted from the API: the Quick Start called a
+      # TimelineView initialiser deprecated since v0.10, and the Appearance
+      # example passed its arguments in an order that does not compile.
+      # Tools/readme-snippets.sh copies every ```swift block into
+      # Examples/ReadmeSnippets.swift, which the KadrUIExamples target builds,
+      # with warnings as errors, on macOS in `swift test` and on iOS below.
+      # This step fails if that copy is stale, so a README edit cannot skip
+      # the compiler.
+      - name: README snippets are current
+        run: Tools/readme-snippets.sh --check
+
       - run: swift test
 
       # `swift test` runs on macOS, where every `#if os(iOS)` and
@@ -52,5 +64,12 @@ jobs:
       # kadr-audio had the identical gap and its iOS slice did not compile at all,
       # through six releases, with a green suite the whole time. Prevention here,
       # not a fix.
+      #
+      # `KadrUI-Package` builds the library and the README examples. Xcode only
+      # generates an all-targets scheme for a package with more than one
+      # product, and the examples are deliberately not a product, so this one
+      # is checked in under .swiftpm/xcode/xcshareddata/xcschemes. It leaves
+      # out the test target: `swift test` covers it, and its snapshot and
+      # inspection dependencies would only add build time here.
       - name: Build for iOS
-        run: xcodebuild -scheme KadrUI -destination 'generic/platform=iOS' -quiet build
+        run: xcodebuild -scheme KadrUI-Package -destination 'generic/platform=iOS' -quiet build
