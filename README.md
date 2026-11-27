@@ -64,6 +64,13 @@ struct EditorScreen: View {
 | **`InspectorPanel`** *(v0.6)* | Per-clip property panel: Transform sliders (position / rotation / scale / anchor), opacity, animatable filter intensities. Edits surface through callbacks like `TimelineView.onTrim` | `Kadr.Transform`, `Kadr.Filter`, `Kadr.Clip.opacity` |
 | **`KeyframeEditor`** *(v0.6)* | Per-property keyframe tracks. Tap-to-add at playhead, long-press to remove, drag to retime. One row per animatable property (`.transform` / `.opacity` / `.filter(index:)`) | `Kadr.Animation<T>`, `Kadr.Clip.transformAnimation`, `Kadr.Clip.opacityAnimation`, `Kadr.VideoClip.filterAnimations` |
 | **Animated `TextOverlay` preview** *(v0.6)* | When a `TextOverlay` carries a `textAnimation`, `OverlayHost` runs the `[CAAnimation]` against a live `CATextLayer` so preview matches export | `Kadr.TextAnimation` |
+| **`OverlayInspectorPanel`** *(v0.8)* | Property panel for a selected overlay: position, anchor and opacity, plus text and text animation for `TextOverlay` and rotation for `StickerOverlay` | `Kadr.Overlay`, `Kadr.TextOverlay`, `Kadr.StickerOverlay` |
+| **`OverlayKeyframeEditor`** *(v0.8)* | `KeyframeEditor`'s gestures for an overlay's position and size animations, on composition time rather than clip time | `Kadr.Animation<Position>`, `Kadr.Animation<Size>` |
+| **`CaptionEditor`** *(v0.8)* | List editor for caption cues: edit text and start/end times, snap either to the playhead, add a cue at the playhead, delete. Cues outside the composition are flagged, not dropped | `Kadr.Caption`, `Kadr.Video.captions(_:)` |
+| **`SpeedCurveEditor`** *(v0.8)* | Speed keyframes for a `VideoClip` on a log-scaled axis, clamped to `0.25…4×`: tap to add, drag to move, long-press to remove. Reports the new curve, or `nil` to clear it | `Kadr.Speed.curved(_:)`, `Kadr.Animation<Double>` |
+| **`TransitionPicker`** *(v0.19)* | Choose a transition's kind, duration and direction, and get a `Transition` back. Pass `durationRange` to clamp the duration to what the neighbouring clips allow | `Kadr.Transition` |
+| **`ClipSplitter`** *(v0.19)* | Cut a clip in two at a time. Pure functions, no SwiftUI; returns the new clips, or the reason it can't | `Kadr.Clip`, `Kadr.ClipID` |
+| **`TransportBand`** *(v0.20)*, **`TransportControls`** *(v0.21)* | Playback controls for `VideoPreview`: skip back, play/pause, skip forward, time readout, optional loop and full-screen toggles. Writes the same `currentTime` / `isPlaying` bindings `VideoPreview` reads. `TransportControls` holds its decisions as pure functions for custom chrome | `Kadr.Video.duration` |
 
 ## Appearance
 
@@ -113,7 +120,7 @@ Add KadrUI to your `Package.swift`:
 
 <!-- readme-snippets: skip -->
 ```swift
-.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.0")),
+.package(url: "https://github.com/SteliyanH/kadr-ui.git", .upToNextMinor(from: "0.22.1")),
 ```
 
 Then add `KadrUI` to your target's dependencies. Kadr is pulled in transitively; [Compatibility](#compatibility) says which versions.

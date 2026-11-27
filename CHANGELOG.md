@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-11-27
+
 ### Changed
 
 - **tvOS is no longer listed as supported.** KadrUI has never built for tvOS:
@@ -14,6 +16,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   neither, nor `Slider`. The manifest no longer declares tvOS and the README
   no longer claims it. Nothing that worked stops working. kadr itself still
   supports tvOS.
+
+### Fixed
+
+- **`VideoPreview` builds without Swift 6 concurrency warnings.** Its AVPlayer
+  time observer and seek completion wrote view state from closures the
+  compiler could not prove ran on the main actor: four warnings on Xcode 27.
+  The observer, scheduled on the main queue, now says so with
+  `MainActor.assumeIsolated`. The seek completion, whose queue AVPlayer does
+  not document, hops to the main actor. Behaviour is unchanged.
+
+### Documentation
+
+- **The README's components table lists every component.** Added
+  `OverlayInspectorPanel`, `OverlayKeyframeEditor`, `CaptionEditor`,
+  `SpeedCurveEditor`, `TransitionPicker`, `ClipSplitter`, `TransportBand` and
+  `TransportControls`.
 
 ## [0.22.0] - 2026-11-17
 
@@ -229,7 +247,7 @@ Adopts kadr 0.19.0.
 
 380 → 384 tests.
 
-## [0.16.0] - 2026-08-22## [0.16.0] - 2026-08-22
+## [0.16.0] - 2026-08-22
 
 Adopts kadr 0.17.0.
 
